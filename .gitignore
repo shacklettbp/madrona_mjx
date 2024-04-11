@@ -1,0 +1,5 @@
+/build
+/build-debug
+/.vs
+/CMakeSettings.json
+/scripts/__pycache__
