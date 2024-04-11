@@ -121,6 +121,7 @@ class BarkourEnv(PipelineEnv):
     self._torso_idx = mujoco.mj_name2id(
         sys.mj_model, mujoco.mjtObj.mjOBJ_BODY.value, 'torso'
     )
+
     self._action_scale = action_scale
     self._obs_noise = obs_noise
     self._kick_vel = kick_vel
@@ -415,28 +416,42 @@ class BarkourEnv(PipelineEnv):
 envs.register_environment('barkour', BarkourEnv)
 
 class Simulator:
-  def __init__(self, gpu_id, num_worlds, cpu_madrona, viz_gpu_hdls=None):
+  def __init__(
+      self,
+      gpu_id,
+      num_worlds,
+      batch_render_view_width,
+      batch_render_view_height,
+      cpu_madrona,
+      viz_gpu_hdls=None,
+  ):
+    self.mjx = envs.get_environment('barkour')
+    self.mjx_reset = jax.jit(self.mjx.reset)
+    self.mjx_step = jax.jit(self.mjx.step)
+
     # Initialize madrona simulator
-    
+
+    geo_verts = jax.device_get(self.mjx.sys.mesh_vert)
+    geo_faces = jax.device_get(self.mjx.sys.mesh_face)
+    geo_mesh_vert_offsets = jax.device_get(self.mjx.sys.mesh_vertadr)
+    geo_mesh_face_offsets = jax.device_get(self.mjx.sys.mesh_faceadr)
+
     self.madrona = SimManager(
         exec_mode = madrona.ExecMode.CPU if cpu_madrona else madrona.ExecMode.CUDA,
         gpu_id = gpu_id,
+        geo_vertices = geo_verts,
+        geo_faces = geo_faces,
+        geo_mesh_vertex_offsets = geo_mesh_vert_offsets,
+        geo_mesh_face_offsets = geo_mesh_face_offsets,
         num_worlds = num_worlds,
-        max_episode_length = 500,
-        enable_batch_renderer = True,
-        batch_render_view_width = 64,
-        batch_render_view_height = 64,
+        batch_render_view_width = batch_render_view_width,
+        batch_render_view_height = batch_render_view_height,
         visualizer_gpu_handles = viz_gpu_hdls,
     )
     self.madrona.init()
 
-    self.mjx = envs.get_environment('barkour')
-
     #self.depth = self.madrona.depth_tensor().to_torch()
     #self.rgb = self.madrona.rgb_tensor().to_torch()
-
-    self.mjx_reset = jax.jit(self.mjx.reset)
-    self.mjx_step = jax.jit(self.mjx.step)
 
   def reset(self, rng):
     mjx_state = self.mjx_reset(rng)
@@ -444,9 +459,7 @@ class Simulator:
 
   def step(self, mjx_state, ctrl):
     mjx_state = self.mjx_step(mjx_state, ctrl)
-
-    self.madrona.process_actions()
-
-    self.madrona.post_physics()
+    
+    self.madrona.render()
 
     return mjx_state

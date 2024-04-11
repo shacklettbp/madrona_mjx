@@ -38,7 +38,7 @@ static inline Optional<RenderGPUState> initRenderGPUState(
     const Manager::Config &mgr_cfg,
     const Optional<VisualizerGPUHandles> &viz_gpu_hdls)
 {
-    if (viz_gpu_hdls.has_value() || !mgr_cfg.enableBatchRenderer) {
+    if (viz_gpu_hdls.has_value()) {
         return Optional<RenderGPUState>::none();
     }
 
@@ -58,7 +58,7 @@ static inline Optional<render::RenderManager> initRenderManager(
     const Optional<VisualizerGPUHandles> &viz_gpu_hdls,
     const Optional<RenderGPUState> &render_gpu_state)
 {
-    if (!viz_gpu_hdls.has_value() && !mgr_cfg.enableBatchRenderer) {
+    if (!viz_gpu_hdls.has_value()) {
         return Optional<render::RenderManager>::none();
     }
 
@@ -76,7 +76,7 @@ static inline Optional<render::RenderManager> initRenderManager(
     }
 
     return render::RenderManager(render_api, render_dev, {
-        .enableBatchRenderer = mgr_cfg.enableBatchRenderer,
+        .enableBatchRenderer = true,
         .agentViewWidth = mgr_cfg.batchRenderViewWidth,
         .agentViewHeight = mgr_cfg.batchRenderViewHeight,
         .numWorlds = mgr_cfg.numWorlds,
@@ -89,19 +89,13 @@ static inline Optional<render::RenderManager> initRenderManager(
 
 struct Manager::Impl {
     Config cfg;
-    WorldReset *worldResetBuffer;
-    Action *agentActionsBuffer;
     Optional<RenderGPUState> renderGPUState;
     Optional<render::RenderManager> renderMgr;
 
     inline Impl(const Manager::Config &mgr_cfg,
-                WorldReset *reset_buffer,
-                Action *action_buffer,
                 Optional<RenderGPUState> &&render_gpu_state,
                 Optional<render::RenderManager> &&render_mgr)
         : cfg(mgr_cfg),
-          worldResetBuffer(reset_buffer),
-          agentActionsBuffer(action_buffer),
           renderGPUState(std::move(render_gpu_state)),
           renderMgr(std::move(render_mgr))
     {}
@@ -109,21 +103,16 @@ struct Manager::Impl {
     inline virtual ~Impl() {}
 
     virtual void init() = 0;
-    virtual void processActions() = 0;
-    virtual void postPhysics() = 0;
+    virtual void render() = 0;
 
 #ifdef MADRONA_CUDA_SUPPORT
-    virtual void processActionsAsync(cudaStream_t strm) = 0;
-    virtual void postPhysicsAsync(cudaStream_t strm) = 0;
+    virtual void renderAsync(cudaStream_t strm) = 0;
 #endif
 
     inline void renderStep()
     {
         if (renderMgr.has_value()) {
             renderMgr->readECS();
-        }
-
-        if (cfg.enableBatchRenderer) {
             renderMgr->batchRender();
         }
     }
@@ -134,6 +123,7 @@ struct Manager::Impl {
 
     static inline Impl * make(
         const Config &cfg,
+        const MJXModelGeometry &geo,
         const Optional<VisualizerGPUHandles> &viz_gpu_hdls);
 };
 
@@ -144,13 +134,10 @@ struct Manager::CPUImpl final : Manager::Impl {
     TaskGraphT cpuExec;
 
     inline CPUImpl(const Manager::Config &mgr_cfg,
-                   WorldReset *reset_buffer,
-                   Action *action_buffer,
                    Optional<RenderGPUState> &&render_gpu_state,
                    Optional<render::RenderManager> &&render_mgr,
                    TaskGraphT &&cpu_exec)
         : Impl(mgr_cfg,
-               reset_buffer, action_buffer,
                std::move(render_gpu_state), std::move(render_mgr)),
           cpuExec(std::move(cpu_exec))
     {}
@@ -163,25 +150,13 @@ struct Manager::CPUImpl final : Manager::Impl {
         renderStep();
     }
 
-    inline virtual void processActions() final
+    inline virtual void render() final
     {
-        cpuExec.runTaskGraph(TaskGraphID::ProcessActions);
-    }
-
-    inline virtual void postPhysics() final
-    {
-        cpuExec.runTaskGraph(TaskGraphID::PostPhysics);
-        renderStep();
+        cpuExec.runTaskGraph(TaskGraphID::Render);
     }
 
 #ifdef MADRONA_CUDA_SUPPORT
-    virtual void processActionsAsync(cudaStream_t strm) final
-    {
-        (void)strm;
-        FATAL("madMJX TODO: CPU backend integration");
-    }
-
-    virtual void postPhysicsAsync(cudaStream_t strm) final
+    virtual void renderAsync(cudaStream_t strm) final
     {
         (void)strm;
         FATAL("madMJX TODO: CPU backend integration");
@@ -200,53 +175,37 @@ struct Manager::CPUImpl final : Manager::Impl {
 #ifdef MADRONA_CUDA_SUPPORT
 struct Manager::CUDAImpl final : Manager::Impl {
     MWCudaExecutor gpuExec;
-    MWCudaLaunchGraph initGraph;
-    MWCudaLaunchGraph processActionsGraph;
-    MWCudaLaunchGraph postPhysicsGraph;
+    MWCudaLaunchGraph renderGraph;
 
     inline CUDAImpl(const Manager::Config &mgr_cfg,
-                   WorldReset *reset_buffer,
-                   Action *action_buffer,
-                   Optional<RenderGPUState> &&render_gpu_state,
-                   Optional<render::RenderManager> &&render_mgr,
-                   MWCudaExecutor &&gpu_exec)
+                    Optional<RenderGPUState> &&render_gpu_state,
+                    Optional<render::RenderManager> &&render_mgr,
+                    MWCudaExecutor &&gpu_exec)
         : Impl(mgr_cfg,
-               reset_buffer, action_buffer,
                std::move(render_gpu_state), std::move(render_mgr)),
           gpuExec(std::move(gpu_exec)),
-          initGraph(gpuExec.buildLaunchGraph(TaskGraphID::Init)),
-          processActionsGraph(
-              gpuExec.buildLaunchGraph(TaskGraphID::ProcessActions)),
-          postPhysicsGraph(
-              gpuExec.buildLaunchGraph(TaskGraphID::PostPhysics))
+          renderGraph(gpuExec.buildLaunchGraph(TaskGraphID::Render))
     {}
 
     inline virtual ~CUDAImpl() final {}
 
     inline virtual void init() final
     {
-        gpuExec.run(initGraph);
+        MWCudaLaunchGraph init_graph =
+            gpuExec.buildLaunchGraph(TaskGraphID::Init);
+
+        gpuExec.run(init_graph);
     }
 
-    inline virtual void processActions() final
+    inline virtual void render() final
     {
-        gpuExec.run(processActionsGraph);
-    }
-
-    inline virtual void postPhysics() final
-    {
-        gpuExec.run(postPhysicsGraph);
+        gpuExec.run(renderGraph);
         renderStep();
     }
 
-    inline virtual void processActionsAsync(cudaStream_t strm) final
+    inline virtual void renderAsync(cudaStream_t strm) final
     {
-        gpuExec.runAsync(processActionsGraph, strm);
-    }
-
-    inline virtual void postPhysicsAsync(cudaStream_t strm) final
-    {
-        gpuExec.runAsync(postPhysicsGraph, strm);
+        gpuExec.runAsync(renderGraph, strm);
         // Currently a CPU sync is needed to read back the total number of
         // instances for Vulkan
         REQ_CUDA(cudaStreamSynchronize(strm));
@@ -263,41 +222,50 @@ struct Manager::CUDAImpl final : Manager::Impl {
 };
 #endif
 
-static void loadRenderObjects(render::RenderManager &render_mgr)
+static void loadRenderObjects(
+    const MJXModelGeometry &geo,
+    render::RenderManager &render_mgr)
 {
-    std::array<std::string, (size_t)SimObject::NumObjects> render_asset_paths;
-    render_asset_paths[(size_t)SimObject::Pole] =
-        (std::filesystem::path(DATA_DIR) / "pole_render.obj").string();
-    render_asset_paths[(size_t)SimObject::Cart] =
-        (std::filesystem::path(DATA_DIR) / "cart_render.obj").string();
-    render_asset_paths[(size_t)SimObject::Backdrop] =
-        (std::filesystem::path(DATA_DIR) / "plane.obj").string();
+    using namespace imp;
 
-    std::array<const char *, (size_t)SimObject::NumObjects> render_asset_cstrs;
-    for (size_t i = 0; i < render_asset_paths.size(); i++) {
-        render_asset_cstrs[i] = render_asset_paths[i].c_str();
-    }
+    HeapArray<SourceMesh> meshes(geo.numMeshes);
+    HeapArray<SourceObject> objs(geo.numMeshes);
 
-    std::array<char, 1024> import_err;
-    auto render_assets = imp::ImportedAssets::importFromDisk(
-        render_asset_cstrs, Span<char>(import_err.data(), import_err.size()));
+    const CountT num_meshes = (CountT)geo.numMeshes;
+    for (CountT mesh_idx = 0; mesh_idx < num_meshes; mesh_idx++) {
+        uint32_t mesh_vert_offset = geo.vertexOffsets[mesh_idx];
+        uint32_t next_vert_offset = mesh_idx < num_meshes - 1 ?
+            geo.vertexOffsets[mesh_idx + 1] : geo.numVertices;
 
-    if (!render_assets.has_value()) {
-        FATAL("Failed to load render assets: %s", import_err);
+        uint32_t mesh_tri_offset = geo.triOffsets[mesh_idx];
+        uint32_t next_tri_offset = mesh_idx < num_meshes - 1 ?
+            geo.triOffsets[mesh_idx + 1] : geo.numTris;
+
+        uint32_t mesh_num_verts = next_vert_offset - mesh_vert_offset;
+        uint32_t mesh_num_tris = next_tri_offset - mesh_tri_offset;
+        uint32_t mesh_idx_offset = mesh_tri_offset * 3;
+
+        meshes[mesh_idx] = {
+            .positions = geo.vertices + mesh_vert_offset,
+            .normals = nullptr,
+            .tangentAndSigns = nullptr,
+            .uvs = nullptr,
+            .indices = geo.indices + mesh_idx_offset,
+            .faceCounts = nullptr,
+            .faceMaterials = nullptr,
+            .numVertices = mesh_num_verts,
+            .numFaces = mesh_num_tris,
+            .materialIDX = 0,
+        };
+
+        objs[mesh_idx] = { Span<SourceMesh>(&meshes[mesh_idx], 1) };
     }
 
     auto materials = std::to_array<imp::SourceMaterial>({
-        { render::rgb8ToFloat(191, 108, 10), -1, 0.8f, 0.2f },
-        { render::rgb8ToFloat(230, 230, 20), -1, 0.8f, 1.0f },
-        { render::rgb8ToFloat(180, 180, 180), -1, 0.8f, 1.0f },
+        { render::rgb8ToFloat(255, 255, 255), -1, 0.8f, 0.2f },
     });
 
-    // Override materials
-    render_assets->objects[(CountT)SimObject::Pole].meshes[0].materialIDX = 0;
-    render_assets->objects[(CountT)SimObject::Cart].meshes[0].materialIDX = 1;
-    render_assets->objects[(CountT)SimObject::Backdrop].meshes[0].materialIDX = 2;
-
-    render_mgr.loadObjects(render_assets->objects, materials, {});
+    render_mgr.loadObjects(objs, materials, {});
 
     render_mgr.configureLighting({
         { true, math::Vector3{1.0f, 1.0f, -2.0f}, math::Vector3{1.0f, 1.0f, 1.0f} }
@@ -306,10 +274,11 @@ static void loadRenderObjects(render::RenderManager &render_mgr)
 
 Manager::Impl * Manager::Impl::make(
     const Manager::Config &mgr_cfg,
+    const MJXModelGeometry &geo,
     const Optional<VisualizerGPUHandles> &viz_gpu_hdls)
 {
     Sim::Config sim_cfg;
-    sim_cfg.maxStepsPerEpisode = mgr_cfg.maxEpisodeLength;
+    sim_cfg.numMeshes = geo.numMeshes;
 
     switch (mgr_cfg.execMode) {
     case ExecMode::CUDA: {
@@ -323,7 +292,7 @@ Manager::Impl * Manager::Impl::make(
             initRenderManager(mgr_cfg, viz_gpu_hdls, render_gpu_state);
 
         if (render_mgr.has_value()) {
-            loadRenderObjects(*render_mgr);
+            loadRenderObjects(geo, *render_mgr);
             sim_cfg.renderBridge = render_mgr->bridge();
         } else {
             sim_cfg.renderBridge = nullptr;
@@ -347,16 +316,8 @@ Manager::Impl * Manager::Impl::make(
             CompileConfig::OptMode::LTO,
         }, cu_ctx);
 
-        WorldReset *world_reset_buffer =  (WorldReset *)gpu_exec.getExported(
-            (uint32_t)ExportID::EpisodeReset);
-
-        Action *agent_actions_buffer = (Action *)gpu_exec.getExported(
-            (uint32_t)ExportID::AgentAction);
-
         return new CUDAImpl {
             mgr_cfg,
-            world_reset_buffer,
-            agent_actions_buffer,
             std::move(render_gpu_state),
             std::move(render_mgr),
             std::move(gpu_exec),
@@ -373,7 +334,7 @@ Manager::Impl * Manager::Impl::make(
             initRenderManager(mgr_cfg, viz_gpu_hdls, render_gpu_state);
 
         if (render_mgr.has_value()) {
-            loadRenderObjects(*render_mgr);
+            loadRenderObjects(geo, *render_mgr);
             sim_cfg.renderBridge = render_mgr->bridge();
         } else {
             sim_cfg.renderBridge = nullptr;
@@ -391,16 +352,8 @@ Manager::Impl * Manager::Impl::make(
             (uint32_t)TaskGraphID::NumGraphs,
         };
 
-        WorldReset *world_reset_buffer = (WorldReset *)cpu_exec.getExported(
-                (uint32_t)ExportID::EpisodeReset);
-
-        Action *agent_actions_buffer = (Action *)cpu_exec.getExported(
-            (uint32_t)ExportID::AgentAction);
-
         auto cpu_impl = new CPUImpl {
             mgr_cfg,
-            world_reset_buffer,
-            agent_actions_buffer,
             std::move(render_gpu_state),
             std::move(render_mgr),
             std::move(cpu_exec),
@@ -413,8 +366,9 @@ Manager::Impl * Manager::Impl::make(
 }
 
 Manager::Manager(const Config &cfg,
+                 const MJXModelGeometry &geo,
                  Optional<VisualizerGPUHandles> viz_gpu_hdls)
-    : impl_(Impl::make(cfg, viz_gpu_hdls))
+    : impl_(Impl::make(cfg, geo, viz_gpu_hdls))
 {}
 
 Manager::~Manager() {}
@@ -424,72 +378,21 @@ void Manager::init()
     impl_->init();
 }
 
-void Manager::processActions()
+void Manager::render()
 {
-    impl_->processActions();
-}
-
-void Manager::postPhysics()
-{
-    impl_->postPhysics();
+    impl_->render();
 }
 
 #ifdef MADRONA_CUDA_SUPPORT
-void Manager::processActionsAsync(cudaStream_t strm)
+void Manager::renderAsync(cudaStream_t strm)
 {
-    impl_->processActionsAsync(strm);
-}
-
-void Manager::postPhysicsAsync(cudaStream_t strm)
-{
-    impl_->postPhysicsAsync(strm);
+    impl_->renderAsync(strm);
 }
 #endif
 
-Tensor Manager::resetTensor() const
+Tensor Manager::instancePositionsTensor() const
 {
-    return impl_->exportTensor(ExportID::EpisodeReset,
-                               TensorElementType::Int32,
-                               {
-                                   impl_->cfg.numWorlds,
-                                   1,
-                               });
-}
-
-Tensor Manager::doneTensor() const
-{
-    return impl_->exportTensor(ExportID::EpisodeDone,
-                               TensorElementType::Int32,
-                               {
-                                   impl_->cfg.numWorlds,
-                                   1,
-                               });
-}
-
-
-Tensor Manager::actionTensor() const
-{
-    return impl_->exportTensor(ExportID::AgentAction,
-                               TensorElementType::Int32,
-        {
-            impl_->cfg.numWorlds,
-            1,
-        });
-}
-
-Tensor Manager::rewardTensor() const
-{
-    return impl_->exportTensor(ExportID::AgentReward,
-                               TensorElementType::Float32,
-                               {
-                                   impl_->cfg.numWorlds,
-                                   1,
-                               });
-}
-
-Tensor Manager::rigidBodyPositionsTensor() const
-{
-    return impl_->exportTensor(ExportID::RigidBodyPositions,
+    return impl_->exportTensor(ExportID::InstancePositions,
                                TensorElementType::Float32,
                                {
                                    impl_->cfg.numWorlds,
@@ -498,9 +401,9 @@ Tensor Manager::rigidBodyPositionsTensor() const
                                });
 }
 
-Tensor Manager::rigidBodyRotationsTensor() const
+Tensor Manager::instanceRotationsTensor() const
 {
-    return impl_->exportTensor(ExportID::RigidBodyRotations,
+    return impl_->exportTensor(ExportID::InstanceRotations,
                                TensorElementType::Float32,
                                {
                                    impl_->cfg.numWorlds,
@@ -509,14 +412,25 @@ Tensor Manager::rigidBodyRotationsTensor() const
                                });
 }
 
-Tensor Manager::jointForcesTensor() const
+Tensor Manager::cameraPositionsTensor() const
 {
-    return impl_->exportTensor(ExportID::JointForces,
+    return impl_->exportTensor(ExportID::CameraPositions,
                                TensorElementType::Float32,
                                {
                                    impl_->cfg.numWorlds,
-                                   1,
-                                   sizeof(JointForce) / sizeof(float),
+                                   2,
+                                   sizeof(Quat) / sizeof(float),
+                               });
+}
+
+Tensor Manager::cameraRotationsTensor() const
+{
+    return impl_->exportTensor(ExportID::CameraRotations,
+                               TensorElementType::Float32,
+                               {
+                                   impl_->cfg.numWorlds,
+                                   2,
+                                   sizeof(Quat) / sizeof(float),
                                });
 }
 
@@ -542,43 +456,6 @@ Tensor Manager::depthTensor() const
         impl_->cfg.batchRenderViewWidth,
         1,
     }, impl_->cfg.gpuID);
-}
-
-void Manager::triggerReset(int32_t world_idx)
-{
-    WorldReset reset {
-        1,
-    };
-
-    auto *reset_ptr = impl_->worldResetBuffer + world_idx;
-
-    if (impl_->cfg.execMode == ExecMode::CUDA) {
-#ifdef MADRONA_CUDA_SUPPORT
-        cudaMemcpy(reset_ptr, &reset, sizeof(WorldReset),
-                   cudaMemcpyHostToDevice);
-#endif
-    }  else {
-        *reset_ptr = reset;
-    }
-}
-
-void Manager::setAction(int32_t world_idx,
-                        int32_t move_amount)
-{
-    Action action { 
-        .move = move_amount,
-    };
-
-    auto *action_ptr = impl_->agentActionsBuffer + world_idx;
-
-    if (impl_->cfg.execMode == ExecMode::CUDA) {
-#ifdef MADRONA_CUDA_SUPPORT
-        cudaMemcpy(action_ptr, &action, sizeof(Action),
-                   cudaMemcpyHostToDevice);
-#endif
-    } else {
-        *action_ptr = action;
-    }
 }
 
 uint32_t Manager::numWorlds() const

@@ -13,29 +13,16 @@ class Engine;
 // This enum is used by the Sim and Manager classes to track the export slots
 // for each component exported to the training code.
 enum class ExportID : uint32_t {
-    EpisodeReset,
-    EpisodeDone,
-    AgentAction,
-    AgentReward,
-    RigidBodyPositions,
-    RigidBodyRotations,
-    JointForces,
+    InstancePositions,
+    InstanceRotations,
+    CameraPositions,
+    CameraRotations,
     NumExports,
-};
-
-// Stores values for the ObjectID component that links entities to
-// render / physics assets.
-enum class SimObject : uint32_t {
-    Pole,
-    Cart,
-    Backdrop,
-    NumObjects,
 };
 
 enum class TaskGraphID : uint32_t {
     Init,
-    ProcessActions,
-    PostPhysics,
+    Render,
     NumGraphs,
 };
 
@@ -48,7 +35,7 @@ enum class TaskGraphID : uint32_t {
 // in this class in order to ensure efficient access patterns.
 struct Sim : public madrona::WorldBase {
     struct Config {
-        uint32_t maxStepsPerEpisode;
+        uint32_t numMeshes;
         const madrona::render::RenderECSBridge *renderBridge;
     };
 
@@ -73,13 +60,6 @@ struct Sim : public madrona::WorldBase {
     Sim(Engine &ctx,
         const Config &cfg,
         const WorldInit &);
-
-    uint32_t maxStepsPerEpisode;
-
-    Entity agent;
-    Entity cart;
-    Entity pole;
-    Entity joint;
 };
 
 class Engine : public ::madrona::CustomContext<Engine, Sim> {

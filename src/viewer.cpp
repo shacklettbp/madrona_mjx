@@ -59,22 +59,16 @@ struct Visualizer {
         viewer.loop(
         [&mgr](CountT world_idx, const Viewer::UserInput &input)
         {
-            using Key = Viewer::KeyboardKey;
-            if (input.keyHit(Key::R)) {
-                mgr.triggerReset(world_idx);
-            }
+            (void)mgr;
+            (void)world_idx;
+            (void)input;
         },
         [&mgr](CountT world_idx, CountT,
                const Viewer::UserInput &input)
         {
-            using Key = Viewer::KeyboardKey;
-
-            int32_t move = 0;
-            if (input.keyPressed(Key::Space)) {
-                move = 1;
-            }
-
-            mgr.setAction(world_idx, move);
+            (void)mgr;
+            (void)world_idx;
+            (void)input;
         }, [&]() {
             sim_cb();
         }, []() {});
