@@ -104,10 +104,15 @@ NB_MODULE(madrona_mjx_viz, m) {
            nb::arg("manager"),
            nb::keep_alive<1, 2>(),
            nb::keep_alive<1, 3>())
-        .def("loop", [](Visualizer *self, Manager *mgr, nb::callable cb) {
+        .def("loop",
+            [](Visualizer *self, Manager *mgr, nb::callable cb,
+               nb::object carry)
+        {
             self->loop(*mgr, [&]() {
-                cb();
+                carry = cb(carry);
             });
+
+            return carry;
         })
     ;
 }

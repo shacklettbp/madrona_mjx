@@ -1,6 +1,17 @@
-from madrona_mjx_sim import SimManager, madrona
 import math
 import sys
+from typing import Optional, Any, List, Sequence, Dict, Tuple, Union
+import os
+from os import environ as env_vars
+
+def limit_jax_mem(limit):
+    env_vars["XLA_PYTHON_CLIENT_MEM_FRACTION"] = f"{limit:.2f}"
+limit_jax_mem(0.5)
+
+import jax
+from jax import random, numpy as jp
+import numpy as np
+from madrona_mjx_sim import SimManager, madrona
 
 from brax import base
 from brax import envs
@@ -8,12 +19,73 @@ from brax import math
 from brax.base import Base, Motion, Transform
 from brax.envs.base import Env, PipelineEnv, State
 from brax.mjx.base import State as MjxState
-from brax.io import html, mjcf, model
+
+from brax.io import mjcf
+from ml_collections import config_dict
 
 from etils import epath
 
 import mujoco
 from mujoco import mjx
+
+def get_config():
+  """Returns reward config for barkour quadruped environment."""
+
+  def get_default_rewards_config():
+    default_config = config_dict.ConfigDict(
+        dict(
+            # The coefficients for all reward terms used for training. All
+            # physical quantities are in SI units, if no otherwise specified,
+            # i.e. joint positions are in rad, positions are measured in meters,
+            # torques in Nm, and time in seconds, and forces in Newtons.
+            scales=config_dict.ConfigDict(
+                dict(
+                    # Tracking rewards are computed using exp(-delta^2/sigma)
+                    # sigma can be a hyperparameters to tune.
+                    # Track the base x-y velocity (no z-velocity tracking.)
+                    tracking_lin_vel=1.5,
+                    # Track the angular velocity along z-axis, i.e. yaw rate.
+                    tracking_ang_vel=0.8,
+                    # Below are regularization terms, we roughly divide the
+                    # terms to base state regularizations, joint
+                    # regularizations, and other behavior regularizations.
+                    # Penalize the base velocity in z direction, L2 penalty.
+                    lin_vel_z=-2.0,
+                    # Penalize the base roll and pitch rate. L2 penalty.
+                    ang_vel_xy=-0.05,
+                    # Penalize non-zero roll and pitch angles. L2 penalty.
+                    orientation=-5.0,
+                    # L2 regularization of joint torques, |tau|^2.
+                    torques=-0.0002,
+                    # Penalize the change in the action and encourage smooth
+                    # actions. L2 regularization |action - last_action|^2
+                    action_rate=-0.01,
+                    # Encourage long swing steps.  However, it does not
+                    # encourage high clearances.
+                    feet_air_time=0.2,
+                    # Encourage no motion at zero command, L2 regularization
+                    # |q - q_default|^2.
+                    stand_still=-0.5,
+                    # Early termination penalty.
+                    termination=-1.0,
+                    # Penalizing foot slipping on the ground.
+                    foot_slip=-0.1,
+                )
+            ),
+            # Tracking reward = exp(-error^2/sigma).
+            tracking_sigma=0.25,
+        )
+    )
+    return default_config
+
+  default_config = config_dict.ConfigDict(
+      dict(
+          rewards=get_default_rewards_config(),
+      )
+  )
+
+  return default_config
+
 
 class BarkourEnv(PipelineEnv):
   """Environment for training the barkour quadruped joystick policy in MJX."""
@@ -357,13 +429,24 @@ class Simulator:
         visualizer_gpu_handles = viz_gpu_hdls,
     )
     self.madrona.init()
-    
-    self.mjx = BarkourEnv()
 
-    self.depth = self.madrona.depth_tensor().to_torch()
-    self.rgb = self.madrona.rgb_tensor().to_torch()
+    self.mjx = envs.get_environment('barkour')
 
-  def step(self):
+    #self.depth = self.madrona.depth_tensor().to_torch()
+    #self.rgb = self.madrona.rgb_tensor().to_torch()
+
+    self.mjx_reset = jax.jit(self.mjx.reset)
+    self.mjx_step = jax.jit(self.mjx.step)
+
+  def reset(self, rng):
+    mjx_state = self.mjx_reset(rng)
+    return mjx_state
+
+  def step(self, mjx_state, ctrl):
+    mjx_state = self.mjx_step(mjx_state, ctrl)
+
     self.madrona.process_actions()
 
     self.madrona.post_physics()
+
+    return mjx_state
