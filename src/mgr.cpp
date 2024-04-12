@@ -57,10 +57,6 @@ static inline Optional<render::RenderManager> initRenderManager(
     const Optional<VisualizerGPUHandles> &viz_gpu_hdls,
     const Optional<RenderGPUState> &render_gpu_state)
 {
-    if (!viz_gpu_hdls.has_value()) {
-        return Optional<render::RenderManager>::none();
-    }
-
     render::APIBackend *render_api;
     render::GPUDevice *render_dev;
 
@@ -80,7 +76,7 @@ static inline Optional<render::RenderManager> initRenderManager(
         .agentViewHeight = mgr_cfg.batchRenderViewHeight,
         .numWorlds = mgr_cfg.numWorlds,
         .maxViewsPerWorld = 1,
-        .maxInstancesPerWorld = 10,
+        .maxInstancesPerWorld = 100,
         .execMode = mgr_cfg.execMode,
         .voxelCfg = {},
     });
@@ -477,7 +473,7 @@ Tensor Manager::instancePositionsTensor() const
                                TensorElementType::Float32,
                                {
                                    impl_->cfg.numWorlds,
-                                   2,
+                                   impl_->numGeoms,
                                    sizeof(Vector3) / sizeof(float),
                                });
 }
@@ -488,7 +484,7 @@ Tensor Manager::instanceRotationsTensor() const
                                TensorElementType::Float32,
                                {
                                    impl_->cfg.numWorlds,
-                                   2,
+                                   impl_->numGeoms,
                                    sizeof(Quat) / sizeof(float),
                                });
 }
