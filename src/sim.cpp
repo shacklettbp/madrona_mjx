@@ -31,6 +31,12 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
         (uint32_t)ExportID::CameraRotations);
 }
 
+static void setupRenderTasks(TaskGraphBuilder &builder,
+                             Span<const TaskGraphNodeID> deps)
+{
+    RenderingSystem::setupTasks(builder, deps);
+}
+
 #ifdef MADRONA_GPU_MODE
 template <typename ArchetypeT>
 TaskGraph::NodeID queueSortByWorld(TaskGraph::Builder &builder,
@@ -50,14 +56,11 @@ static void setupInitTasks(TaskGraphBuilder &builder)
 #ifdef MADRONA_GPU_MODE
     auto sort_sys = queueSortByWorld<RenderEntity>(builder, {});
     sort_sys = queueSortByWorld<CameraEntity>(builder, {sort_sys});
-#else
-    (void)builder;
-#endif
-}
 
-static void setupRenderTasks(TaskGraphBuilder &builder)
-{
-    RenderingSystem::setupTasks(builder, {});
+    setupRenderTasks(builder, {sort_sys});
+#else
+    setupRenderTasks(builder, {});
+#endif
 }
 
 // Build the task graph
@@ -68,7 +71,7 @@ void Sim::setupTasks(TaskGraphManager &taskgraph_mgr, const Config &)
 
     TaskGraphBuilder &render_tasks_builder =
         taskgraph_mgr.init(TaskGraphID::Render);
-    setupRenderTasks(render_tasks_builder);
+    setupRenderTasks(render_tasks_builder, {});
 }
 
 Sim::Sim(Engine &ctx,
@@ -84,12 +87,39 @@ Sim::Sim(Engine &ctx,
     render::RenderingSystem::attachEntityToView(
         ctx, cam, 60.f, 0.001f, Vector3::zero());
 
-    for (CountT mesh_idx = 0; mesh_idx < (CountT)cfg.numMeshes; mesh_idx++) {
+    for (CountT geom_idx = 0; geom_idx < (CountT)cfg.numGeoms; geom_idx++) {
         Entity instance = ctx.makeRenderableEntity<RenderEntity>();
         ctx.get<Position>(instance) = Vector3::zero();
         ctx.get<Rotation>(instance) = Quat { 1, 0, 0, 0 };
-        ctx.get<Scale>(instance) = Diag3x3 { 1, 1, 1 };
-        ctx.get<ObjectID>(instance) = ObjectID { (int32_t)mesh_idx };
+
+        Diag3x3 scale;
+        int32_t render_obj_idx;
+        switch ((MJXGeomType)cfg.geomTypes[geom_idx]) {
+        case MJXGeomType::Plane: {
+            // FIXME
+            float plane_scale = cfg.geomSizes[geom_idx].z;
+            scale.d0 = plane_scale;
+            scale.d1 = plane_scale;
+            scale.d2 = plane_scale;
+            render_obj_idx = 0;
+        } break;
+        case MJXGeomType::Sphere: {
+            float sphere_scale = cfg.geomSizes[geom_idx].x;
+            scale.d0 = sphere_scale;
+            scale.d1 = sphere_scale;
+            scale.d2 = sphere_scale;
+            render_obj_idx = 1;
+        } break;
+        case MJXGeomType::Mesh: {
+            scale = Diag3x3 { 1, 1, 1 };
+            render_obj_idx = 2 + cfg.geomDataIDs[geom_idx];
+        } break;
+        default: {
+            assert(false);
+        } break;
+        }
+        ctx.get<Scale>(instance) = scale;
+        ctx.get<ObjectID>(instance) = ObjectID { render_obj_idx };
     }
 }
 

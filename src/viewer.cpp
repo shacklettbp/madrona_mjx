@@ -46,7 +46,7 @@ struct Visualizer {
         : viewer(mgr.getRenderManager(), gpu_state.window.get(), {
             .numWorlds = mgr.numWorlds(),
             .simTickRate = 30,
-            .cameraMoveSpeed = 10.f,
+            .cameraMoveSpeed = 5.f,
             .cameraPosition = { 0, -3, 0 },
             .cameraRotation = { 1, 0, 0, 0 },
         })

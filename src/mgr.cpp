@@ -33,7 +33,6 @@ struct RenderGPUState {
     render::GPUHandle gpu;
 };
 
-
 static inline Optional<RenderGPUState> initRenderGPUState(
     const Manager::Config &mgr_cfg,
     const Optional<VisualizerGPUHandles> &viz_gpu_hdls)
@@ -89,13 +88,16 @@ static inline Optional<render::RenderManager> initRenderManager(
 
 struct Manager::Impl {
     Config cfg;
+    uint32_t numGeoms;
     Optional<RenderGPUState> renderGPUState;
     Optional<render::RenderManager> renderMgr;
 
     inline Impl(const Manager::Config &mgr_cfg,
+                uint32_t num_geoms,
                 Optional<RenderGPUState> &&render_gpu_state,
                 Optional<render::RenderManager> &&render_mgr)
         : cfg(mgr_cfg),
+          numGeoms(num_geoms),
           renderGPUState(std::move(render_gpu_state)),
           renderMgr(std::move(render_mgr))
     {}
@@ -103,13 +105,13 @@ struct Manager::Impl {
     inline virtual ~Impl() {}
 
     virtual void init() = 0;
-    virtual void render() = 0;
+    virtual void render(Vector3 *geom_positions, Quat *geom_rotations) = 0;
 
 #ifdef MADRONA_CUDA_SUPPORT
     virtual void renderAsync(cudaStream_t strm) = 0;
 #endif
 
-    inline void renderStep()
+    inline void renderCommon()
     {
         if (renderMgr.has_value()) {
             renderMgr->readECS();
@@ -123,7 +125,7 @@ struct Manager::Impl {
 
     static inline Impl * make(
         const Config &cfg,
-        const MJXModelGeometry &geo,
+        const MJXModel &mjx_model,
         const Optional<VisualizerGPUHandles> &viz_gpu_hdls);
 };
 
@@ -134,10 +136,11 @@ struct Manager::CPUImpl final : Manager::Impl {
     TaskGraphT cpuExec;
 
     inline CPUImpl(const Manager::Config &mgr_cfg,
+                   uint32_t num_geoms,
                    Optional<RenderGPUState> &&render_gpu_state,
                    Optional<render::RenderManager> &&render_mgr,
                    TaskGraphT &&cpu_exec)
-        : Impl(mgr_cfg,
+        : Impl(mgr_cfg, num_geoms,
                std::move(render_gpu_state), std::move(render_mgr)),
           cpuExec(std::move(cpu_exec))
     {}
@@ -147,11 +150,19 @@ struct Manager::CPUImpl final : Manager::Impl {
     inline virtual void init() final
     {
         cpuExec.runTaskGraph(TaskGraphID::Init);
-        renderStep();
+        renderCommon();
     }
 
-    inline virtual void render() final
+    inline virtual void render(Vector3 *geom_positions,
+                               Quat *geom_rotations) final
     {
+        memcpy(cpuExec.getExported((CountT)ExportID::InstancePositions),
+               geom_positions,
+               sizeof(Vector3) * numGeoms * cfg.numWorlds);
+        memcpy(cpuExec.getExported((CountT)ExportID::InstanceRotations),
+               geom_rotations,
+               sizeof(Quat) * numGeoms * cfg.numWorlds);
+
         cpuExec.runTaskGraph(TaskGraphID::Render);
     }
 
@@ -178,10 +189,11 @@ struct Manager::CUDAImpl final : Manager::Impl {
     MWCudaLaunchGraph renderGraph;
 
     inline CUDAImpl(const Manager::Config &mgr_cfg,
+                    uint32_t num_geoms,
                     Optional<RenderGPUState> &&render_gpu_state,
                     Optional<render::RenderManager> &&render_mgr,
                     MWCudaExecutor &&gpu_exec)
-        : Impl(mgr_cfg,
+        : Impl(mgr_cfg, num_geoms,
                std::move(render_gpu_state), std::move(render_mgr)),
           gpuExec(std::move(gpu_exec)),
           renderGraph(gpuExec.buildLaunchGraph(TaskGraphID::Render))
@@ -197,10 +209,20 @@ struct Manager::CUDAImpl final : Manager::Impl {
         gpuExec.run(init_graph);
     }
 
-    inline virtual void render() final
+    inline virtual void render(Vector3 *geom_positions,
+                               Quat *geom_rotations) final
     {
+        cudaMemcpy(gpuExec.getExported((CountT)ExportID::InstancePositions),
+                   geom_positions,
+                   sizeof(Vector3) * numGeoms * cfg.numWorlds,
+                   cudaMemcpyDeviceToDevice);
+        cudaMemcpy(gpuExec.getExported((CountT)ExportID::InstanceRotations),
+                   geom_rotations,
+                   sizeof(Quat) * numGeoms * cfg.numWorlds,
+                   cudaMemcpyDeviceToDevice);
+
         gpuExec.run(renderGraph);
-        renderStep();
+        renderCommon();
     }
 
     inline virtual void renderAsync(cudaStream_t strm) final
@@ -209,7 +231,7 @@ struct Manager::CUDAImpl final : Manager::Impl {
         // Currently a CPU sync is needed to read back the total number of
         // instances for Vulkan
         REQ_CUDA(cudaStreamSynchronize(strm));
-        renderStep();
+        renderCommon();
     }
 
     virtual inline Tensor exportTensor(ExportID slot,
@@ -228,8 +250,37 @@ static void loadRenderObjects(
 {
     using namespace imp;
 
+    std::array<std::string, 2> render_asset_paths;
+    render_asset_paths[0] =
+        (std::filesystem::path(DATA_DIR) / "plane.obj").string();
+    render_asset_paths[1] =
+        (std::filesystem::path(DATA_DIR) / "sphere.obj").string();
+
+    std::array<const char *, render_asset_paths.size()> render_asset_cstrs;
+    for (size_t i = 0; i < render_asset_paths.size(); i++) {
+        render_asset_cstrs[i] = render_asset_paths[i].c_str();
+    }
+
+    std::array<char, 1024> import_err;
+    auto disk_render_assets = imp::ImportedAssets::importFromDisk(
+        render_asset_cstrs, Span<char>(import_err.data(), import_err.size()));
+
+    if (!disk_render_assets.has_value()) {
+        FATAL("Failed to load render assets from disk: %s", import_err);
+    }
+
+
     HeapArray<SourceMesh> meshes(geo.numMeshes);
-    HeapArray<SourceObject> objs(geo.numMeshes);
+
+    const CountT num_disk_objs = disk_render_assets->objects.size();
+    HeapArray<SourceObject> objs(num_disk_objs + geo.numMeshes);
+
+    for (CountT i = 0; i < num_disk_objs; i++) {
+        objs[i] = disk_render_assets->objects[i];
+        for (auto &mesh : objs[i].meshes) {
+            mesh.materialIDX = 0;
+        }
+    }
 
     const CountT num_meshes = (CountT)geo.numMeshes;
     for (CountT mesh_idx = 0; mesh_idx < num_meshes; mesh_idx++) {
@@ -258,7 +309,9 @@ static void loadRenderObjects(
             .materialIDX = 0,
         };
 
-        objs[mesh_idx] = { Span<SourceMesh>(&meshes[mesh_idx], 1) };
+        objs[num_disk_objs + mesh_idx] = {
+            .meshes = Span<SourceMesh>(&meshes[mesh_idx], 1),
+        };
     }
 
     auto materials = std::to_array<imp::SourceMaterial>({
@@ -274,11 +327,11 @@ static void loadRenderObjects(
 
 Manager::Impl * Manager::Impl::make(
     const Manager::Config &mgr_cfg,
-    const MJXModelGeometry &geo,
+    const MJXModel &mjx_model,
     const Optional<VisualizerGPUHandles> &viz_gpu_hdls)
 {
     Sim::Config sim_cfg;
-    sim_cfg.numMeshes = geo.numMeshes;
+    sim_cfg.numGeoms = mjx_model.numGeoms;
 
     switch (mgr_cfg.execMode) {
     case ExecMode::CUDA: {
@@ -292,11 +345,29 @@ Manager::Impl * Manager::Impl::make(
             initRenderManager(mgr_cfg, viz_gpu_hdls, render_gpu_state);
 
         if (render_mgr.has_value()) {
-            loadRenderObjects(geo, *render_mgr);
+            loadRenderObjects(mjx_model.meshGeo, *render_mgr);
             sim_cfg.renderBridge = render_mgr->bridge();
         } else {
             sim_cfg.renderBridge = nullptr;
         }
+
+        int32_t *geom_types_gpu = (int32_t *)cu::allocGPU(
+            sizeof(int32_t) * mjx_model.numGeoms);
+        int32_t *geom_data_ids_gpu = (int32_t *)cu::allocGPU(
+            sizeof(int32_t) * mjx_model.numGeoms);
+        Vector3 *geom_sizes_gpu = (Vector3 *)cu::allocGPU(
+            sizeof(Vector3) * mjx_model.numGeoms);
+
+        REQ_CUDA(cudaMemcpy(geom_types_gpu, mjx_model.geomTypes,
+            sizeof(int32_t) * mjx_model.numGeoms, cudaMemcpyHostToDevice));
+        REQ_CUDA(cudaMemcpy(geom_data_ids_gpu, mjx_model.geomDataIDs,
+            sizeof(int32_t) * mjx_model.numGeoms, cudaMemcpyHostToDevice));
+        REQ_CUDA(cudaMemcpy(geom_sizes_gpu, mjx_model.geomSizes,
+            sizeof(Vector3) * mjx_model.numGeoms, cudaMemcpyHostToDevice));
+
+        sim_cfg.geomTypes = geom_types_gpu;
+        sim_cfg.geomDataIDs = geom_data_ids_gpu;
+        sim_cfg.geomSizes = geom_sizes_gpu;
 
         HeapArray<Sim::WorldInit> world_inits(mgr_cfg.numWorlds);
 
@@ -316,8 +387,13 @@ Manager::Impl * Manager::Impl::make(
             CompileConfig::OptMode::LTO,
         }, cu_ctx);
 
+        cu::deallocGPU(geom_types_gpu);
+        cu::deallocGPU(geom_data_ids_gpu);
+        cu::deallocGPU(geom_sizes_gpu);
+
         return new CUDAImpl {
             mgr_cfg,
+            mjx_model.numGeoms,
             std::move(render_gpu_state),
             std::move(render_mgr),
             std::move(gpu_exec),
@@ -334,11 +410,15 @@ Manager::Impl * Manager::Impl::make(
             initRenderManager(mgr_cfg, viz_gpu_hdls, render_gpu_state);
 
         if (render_mgr.has_value()) {
-            loadRenderObjects(geo, *render_mgr);
+            loadRenderObjects(mjx_model.meshGeo, *render_mgr);
             sim_cfg.renderBridge = render_mgr->bridge();
         } else {
             sim_cfg.renderBridge = nullptr;
         }
+
+        sim_cfg.geomTypes = mjx_model.geomTypes;
+        sim_cfg.geomDataIDs = mjx_model.geomDataIDs;
+        sim_cfg.geomSizes = mjx_model.geomSizes;
 
         HeapArray<Sim::WorldInit> world_inits(mgr_cfg.numWorlds);
 
@@ -354,6 +434,7 @@ Manager::Impl * Manager::Impl::make(
 
         auto cpu_impl = new CPUImpl {
             mgr_cfg,
+            mjx_model.numGeoms,
             std::move(render_gpu_state),
             std::move(render_mgr),
             std::move(cpu_exec),
@@ -366,9 +447,9 @@ Manager::Impl * Manager::Impl::make(
 }
 
 Manager::Manager(const Config &cfg,
-                 const MJXModelGeometry &geo,
+                 const MJXModel &mjx_model,
                  Optional<VisualizerGPUHandles> viz_gpu_hdls)
-    : impl_(Impl::make(cfg, geo, viz_gpu_hdls))
+    : impl_(Impl::make(cfg, mjx_model, viz_gpu_hdls))
 {}
 
 Manager::~Manager() {}
@@ -378,9 +459,9 @@ void Manager::init()
     impl_->init();
 }
 
-void Manager::render()
+void Manager::render(math::Vector3 *geom_pos, math::Quat *geom_rot)
 {
-    impl_->render();
+    impl_->render(geom_pos, geom_rot);
 }
 
 #ifdef MADRONA_CUDA_SUPPORT

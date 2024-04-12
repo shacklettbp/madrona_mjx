@@ -29,6 +29,14 @@ struct MJXModelGeometry {
     uint32_t numMeshes;
 };
 
+struct MJXModel {
+    MJXModelGeometry meshGeo;
+    int32_t *geomTypes;
+    int32_t *geomDataIDs;
+    madrona::math::Vector3 *geomSizes;
+    uint32_t numGeoms;
+};
+
 // The Manager class encapsulates the linkage between the outside training
 // code and the internal simulation state (src/sim.hpp / src/sim.cpp)
 //
@@ -47,13 +55,14 @@ public:
 
     MGR_EXPORT Manager(
         const Config &cfg,
-        const MJXModelGeometry &geo,
+        const MJXModel &mjx_model,
         madrona::Optional<VisualizerGPUHandles> viz_gpu_hdls =
             madrona::Optional<VisualizerGPUHandles>::none());
     MGR_EXPORT ~Manager();
 
     MGR_EXPORT void init();
-    MGR_EXPORT void render();
+    MGR_EXPORT void render(madrona::math::Vector3 *geom_pos,
+                           madrona::math::Quat *geom_rot);
 
 #ifdef MADRONA_CUDA_SUPPORT
     MGR_EXPORT void renderAsync(cudaStream_t strm);

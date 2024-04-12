@@ -35,7 +35,10 @@ enum class TaskGraphID : uint32_t {
 // in this class in order to ensure efficient access patterns.
 struct Sim : public madrona::WorldBase {
     struct Config {
-        uint32_t numMeshes;
+        int32_t *geomTypes;
+        int32_t *geomDataIDs;
+        Vector3 *geomSizes;
+        uint32_t numGeoms;
         const madrona::render::RenderECSBridge *renderBridge;
     };
 

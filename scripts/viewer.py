@@ -32,7 +32,7 @@ visualizer = Visualizer(viz_gpu_state, sim.madrona)
 def init_sim_state(rng):
     rng, init_rng = random.split(rng, 2)
 
-    init_mjx_state = sim.reset(init_rng)
+    init_mjx_state = sim.reset(random.split(init_rng, args.num_worlds))
 
     return init_mjx_state, rng
 
@@ -40,7 +40,6 @@ init_mjx_state, rng = init_sim_state(random.key(0))
 
 policy_inference_fn = policy_init(sim.mjx, init_mjx_state)
 
-@jax.jit
 def step_fn(carry):
     mjx_state, rng = carry
 

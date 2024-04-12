@@ -20,6 +20,12 @@ using madrona::base::ObjectID;
 using madrona::math::Vector3;
 using madrona::math::Quat;
 
+enum class MJXGeomType : uint32_t {
+    Plane = 0,
+    Sphere = 2,
+    Mesh = 7,
+};
+
 struct RenderEntity : public madrona::Archetype<
     ObjectInstance,
 

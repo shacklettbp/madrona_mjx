@@ -3,6 +3,7 @@ import sys
 from typing import Optional, Any, List, Sequence, Dict, Tuple, Union
 import os
 from os import environ as env_vars
+from functools import partial
 
 def limit_jax_mem(limit):
     env_vars["XLA_PYTHON_CLIENT_MEM_FRACTION"] = f"{limit:.2f}"
@@ -426,29 +427,61 @@ class Simulator:
       viz_gpu_hdls=None,
   ):
     self.mjx = envs.get_environment('barkour')
-    self.mjx_reset = jax.jit(self.mjx.reset)
-    self.mjx_step = jax.jit(self.mjx.step)
+    self.mjx_reset = jax.jit(jax.vmap(self.mjx.reset))
+    self.mjx_step = jax.jit(jax.vmap(self.mjx.step))
 
     # Initialize madrona simulator
 
-    geo_verts = jax.device_get(self.mjx.sys.mesh_vert)
-    geo_faces = jax.device_get(self.mjx.sys.mesh_face)
-    geo_mesh_vert_offsets = jax.device_get(self.mjx.sys.mesh_vertadr)
-    geo_mesh_face_offsets = jax.device_get(self.mjx.sys.mesh_faceadr)
+    mesh_verts = self.mjx.sys.mesh_vert
+    mesh_faces = self.mjx.sys.mesh_face
+    mesh_vert_offsets = self.mjx.sys.mesh_vertadr
+    mesh_face_offsets = self.mjx.sys.mesh_faceadr
+    geom_types = self.mjx.sys.geom_type
+    geom_data_ids = self.mjx.sys.geom_dataid
+    geom_sizes = jax.device_get(self.mjx.sys.geom_size)
 
     self.madrona = SimManager(
         exec_mode = madrona.ExecMode.CPU if cpu_madrona else madrona.ExecMode.CUDA,
         gpu_id = gpu_id,
-        geo_vertices = geo_verts,
-        geo_faces = geo_faces,
-        geo_mesh_vertex_offsets = geo_mesh_vert_offsets,
-        geo_mesh_face_offsets = geo_mesh_face_offsets,
+        mesh_vertices = mesh_verts,
+        mesh_faces = mesh_faces,
+        mesh_vertex_offsets = mesh_vert_offsets,
+        mesh_face_offsets = mesh_face_offsets,
+        geom_types = geom_types,
+        geom_data_ids = geom_data_ids,
+        geom_sizes = geom_sizes,
         num_worlds = num_worlds,
         batch_render_view_width = batch_render_view_width,
         batch_render_view_height = batch_render_view_height,
         visualizer_gpu_handles = viz_gpu_hdls,
     )
     self.madrona.init()
+
+    # MJX computes this internally but unfortunately transforms the result to
+    # a matrix, Madrona needs a quaternion
+    def compute_geom_quats(state, m):
+        xquat = state.xquat
+
+        @jax.vmap
+        def mult_quat(u, v):
+            return jp.array([
+                u[0] * v[0] - u[1] * v[1] - u[2] * v[2] - u[3] * v[3],
+                u[0] * v[1] + u[1] * v[0] + u[2] * v[3] - u[3] * v[2],
+                u[0] * v[2] - u[1] * v[3] + u[2] * v[0] + u[3] * v[1],
+                u[0] * v[3] + u[1] * v[2] - u[2] * v[1] + u[3] * v[0],
+            ])
+
+        world_quat = state.xquat[m.geom_bodyid]
+        local_quat = m.geom_quat
+
+        composed = mult_quat(world_quat, local_quat)
+
+        n = jp.linalg.norm(composed, ord=2, axis=-1, keepdims=True)
+
+        return composed / (n + 1e-6 * (n == 0.0))
+
+    self.compute_geom_quats = jax.jit(
+        jax.vmap(compute_geom_quats, in_axes=(0, None)))
 
     #self.depth = self.madrona.depth_tensor().to_torch()
     #self.rgb = self.madrona.rgb_tensor().to_torch()
@@ -459,7 +492,14 @@ class Simulator:
 
   def step(self, mjx_state, ctrl):
     mjx_state = self.mjx_step(mjx_state, ctrl)
-    
-    self.madrona.render()
+
+    #import code
+    #code.interact(local=locals())
+
+    geom_quat = self.compute_geom_quats(mjx_state.pipeline_state, self.mjx.sys)
+
+    self.madrona.render(jax.dlpack.to_dlpack(mjx_state.pipeline_state.geom_xpos),
+                        jax.dlpack.to_dlpack(geom_quat))
 
     return mjx_state
+
