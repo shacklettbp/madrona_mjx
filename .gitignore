@@ -3,3 +3,5 @@
 /.vs
 /CMakeSettings.json
 /scripts/__pycache__
+/src/madrona_mjx/__pycache__
+imgui.ini
