@@ -84,7 +84,7 @@ NB_MODULE(madrona_mjx_sim, m) {
            nb::arg("batch_render_view_width"),
            nb::arg("batch_render_view_height"),
            nb::arg("visualizer_gpu_handles") = nb::none(),
-           nb::keep_alive<1, 14>())
+           nb::keep_alive<1, 15>())
         .def("init", &Manager::init)
         .def("render", [](Manager &mgr,
                           nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_pos,
