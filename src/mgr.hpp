@@ -35,6 +35,7 @@ struct MJXModel {
     int32_t *geomDataIDs;
     madrona::math::Vector3 *geomSizes;
     uint32_t numGeoms;
+    uint32_t numCams;
 };
 
 // The Manager class encapsulates the linkage between the outside training
@@ -62,7 +63,9 @@ public:
 
     MGR_EXPORT void init();
     MGR_EXPORT void render(madrona::math::Vector3 *geom_pos,
-                           madrona::math::Quat *geom_rot);
+                           madrona::math::Quat *geom_rot,
+                           madrona::math::Vector3 *cam_pos,
+                           madrona::math::Quat *cam_rot);
 
 #ifdef MADRONA_CUDA_SUPPORT
     MGR_EXPORT void renderAsync(cudaStream_t strm);

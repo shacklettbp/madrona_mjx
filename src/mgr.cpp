@@ -52,8 +52,9 @@ static inline Optional<RenderGPUState> initRenderGPUState(
     };
 }
 
-static inline Optional<render::RenderManager> initRenderManager(
+static inline render::RenderManager initRenderManager(
     const Manager::Config &mgr_cfg,
+    const MJXModel &mjx_model,
     const Optional<VisualizerGPUHandles> &viz_gpu_hdls,
     const Optional<RenderGPUState> &render_gpu_state)
 {
@@ -75,8 +76,8 @@ static inline Optional<render::RenderManager> initRenderManager(
         .agentViewWidth = mgr_cfg.batchRenderViewWidth,
         .agentViewHeight = mgr_cfg.batchRenderViewHeight,
         .numWorlds = mgr_cfg.numWorlds,
-        .maxViewsPerWorld = 1,
-        .maxInstancesPerWorld = 100,
+        .maxViewsPerWorld = mjx_model.numCams,
+        .maxInstancesPerWorld = mjx_model.numGeoms,
         .execMode = mgr_cfg.execMode,
         .voxelCfg = {},
     });
@@ -85,15 +86,18 @@ static inline Optional<render::RenderManager> initRenderManager(
 struct Manager::Impl {
     Config cfg;
     uint32_t numGeoms;
+    uint32_t numCams;
     Optional<RenderGPUState> renderGPUState;
-    Optional<render::RenderManager> renderMgr;
+    render::RenderManager renderMgr;
 
     inline Impl(const Manager::Config &mgr_cfg,
                 uint32_t num_geoms,
+                uint32_t num_cams,
                 Optional<RenderGPUState> &&render_gpu_state,
-                Optional<render::RenderManager> &&render_mgr)
+                render::RenderManager &&render_mgr)
         : cfg(mgr_cfg),
           numGeoms(num_geoms),
+          numCams(num_cams),
           renderGPUState(std::move(render_gpu_state)),
           renderMgr(std::move(render_mgr))
     {}
@@ -101,7 +105,8 @@ struct Manager::Impl {
     inline virtual ~Impl() {}
 
     virtual void init() = 0;
-    virtual void render(Vector3 *geom_positions, Quat *geom_rotations) = 0;
+    virtual void render(Vector3 *geom_positions, Quat *geom_rotations,
+                        Vector3 *cam_positions, Quat *cam_rotations) = 0;
 
 #ifdef MADRONA_CUDA_SUPPORT
     virtual void renderAsync(cudaStream_t strm) = 0;
@@ -109,10 +114,8 @@ struct Manager::Impl {
 
     inline void renderCommon()
     {
-        if (renderMgr.has_value()) {
-            renderMgr->readECS();
-            renderMgr->batchRender();
-        }
+        renderMgr.readECS();
+        renderMgr.batchRender();
     }
 
     virtual Tensor exportTensor(ExportID slot,
@@ -133,10 +136,11 @@ struct Manager::CPUImpl final : Manager::Impl {
 
     inline CPUImpl(const Manager::Config &mgr_cfg,
                    uint32_t num_geoms,
+                   uint32_t num_cams,
                    Optional<RenderGPUState> &&render_gpu_state,
-                   Optional<render::RenderManager> &&render_mgr,
+                   render::RenderManager &&render_mgr,
                    TaskGraphT &&cpu_exec)
-        : Impl(mgr_cfg, num_geoms,
+        : Impl(mgr_cfg, num_geoms, num_cams,
                std::move(render_gpu_state), std::move(render_mgr)),
           cpuExec(std::move(cpu_exec))
     {}
@@ -150,14 +154,23 @@ struct Manager::CPUImpl final : Manager::Impl {
     }
 
     inline virtual void render(Vector3 *geom_positions,
-                               Quat *geom_rotations) final
+                               Quat *geom_rotations,
+                               Vector3 *cam_positions,
+                               Quat *cam_rotations) final
     {
         memcpy(cpuExec.getExported((CountT)ExportID::InstancePositions),
                geom_positions,
                sizeof(Vector3) * numGeoms * cfg.numWorlds);
         memcpy(cpuExec.getExported((CountT)ExportID::InstanceRotations),
                geom_rotations,
-               sizeof(Quat) * numGeoms * cfg.numWorlds);
+               sizeof(Quat) * numCams * cfg.numWorlds);
+
+        memcpy(cpuExec.getExported((CountT)ExportID::CameraPositions),
+               cam_positions,
+               sizeof(Vector3) * numGeoms * cfg.numWorlds);
+        memcpy(cpuExec.getExported((CountT)ExportID::CameraRotations),
+               cam_rotations,
+               sizeof(Quat) * numCams * cfg.numWorlds);
 
         cpuExec.runTaskGraph(TaskGraphID::Render);
     }
@@ -186,10 +199,11 @@ struct Manager::CUDAImpl final : Manager::Impl {
 
     inline CUDAImpl(const Manager::Config &mgr_cfg,
                     uint32_t num_geoms,
+                    uint32_t num_cams,
                     Optional<RenderGPUState> &&render_gpu_state,
-                    Optional<render::RenderManager> &&render_mgr,
+                    render::RenderManager &&render_mgr,
                     MWCudaExecutor &&gpu_exec)
-        : Impl(mgr_cfg, num_geoms,
+        : Impl(mgr_cfg, num_geoms, num_cams,
                std::move(render_gpu_state), std::move(render_mgr)),
           gpuExec(std::move(gpu_exec)),
           renderGraph(gpuExec.buildLaunchGraph(TaskGraphID::Render))
@@ -206,7 +220,9 @@ struct Manager::CUDAImpl final : Manager::Impl {
     }
 
     inline virtual void render(Vector3 *geom_positions,
-                               Quat *geom_rotations) final
+                               Quat *geom_rotations,
+                               Vector3 *cam_positions,
+                               Quat *cam_rotations) final
     {
         cudaMemcpy(gpuExec.getExported((CountT)ExportID::InstancePositions),
                    geom_positions,
@@ -215,6 +231,15 @@ struct Manager::CUDAImpl final : Manager::Impl {
         cudaMemcpy(gpuExec.getExported((CountT)ExportID::InstanceRotations),
                    geom_rotations,
                    sizeof(Quat) * numGeoms * cfg.numWorlds,
+                   cudaMemcpyDeviceToDevice);
+
+        cudaMemcpy(gpuExec.getExported((CountT)ExportID::CameraPositions),
+                   cam_positions,
+                   sizeof(Vector3) * numCams * cfg.numWorlds,
+                   cudaMemcpyDeviceToDevice);
+        cudaMemcpy(gpuExec.getExported((CountT)ExportID::CameraRotations),
+                   cam_rotations,
+                   sizeof(Quat) * numCams * cfg.numWorlds,
                    cudaMemcpyDeviceToDevice);
 
         gpuExec.run(renderGraph);
@@ -328,6 +353,7 @@ Manager::Impl * Manager::Impl::make(
 {
     Sim::Config sim_cfg;
     sim_cfg.numGeoms = mjx_model.numGeoms;
+    sim_cfg.numCams = mjx_model.numCams;
 
     switch (mgr_cfg.execMode) {
     case ExecMode::CUDA: {
@@ -337,15 +363,12 @@ Manager::Impl * Manager::Impl::make(
         Optional<RenderGPUState> render_gpu_state =
             initRenderGPUState(mgr_cfg, viz_gpu_hdls);
 
-        Optional<render::RenderManager> render_mgr =
-            initRenderManager(mgr_cfg, viz_gpu_hdls, render_gpu_state);
+        render::RenderManager render_mgr =
+            initRenderManager(mgr_cfg, mjx_model,
+                              viz_gpu_hdls, render_gpu_state);
 
-        if (render_mgr.has_value()) {
-            loadRenderObjects(mjx_model.meshGeo, *render_mgr);
-            sim_cfg.renderBridge = render_mgr->bridge();
-        } else {
-            sim_cfg.renderBridge = nullptr;
-        }
+        loadRenderObjects(mjx_model.meshGeo, render_mgr);
+        sim_cfg.renderBridge = render_mgr.bridge();
 
         int32_t *geom_types_gpu = (int32_t *)cu::allocGPU(
             sizeof(int32_t) * mjx_model.numGeoms);
@@ -390,6 +413,7 @@ Manager::Impl * Manager::Impl::make(
         return new CUDAImpl {
             mgr_cfg,
             mjx_model.numGeoms,
+            mjx_model.numCams,
             std::move(render_gpu_state),
             std::move(render_mgr),
             std::move(gpu_exec),
@@ -402,15 +426,12 @@ Manager::Impl * Manager::Impl::make(
         Optional<RenderGPUState> render_gpu_state =
             initRenderGPUState(mgr_cfg, viz_gpu_hdls);
 
-        Optional<render::RenderManager> render_mgr =
-            initRenderManager(mgr_cfg, viz_gpu_hdls, render_gpu_state);
+        render::RenderManager render_mgr =
+            initRenderManager(mgr_cfg, mjx_model,
+                              viz_gpu_hdls, render_gpu_state);
 
-        if (render_mgr.has_value()) {
-            loadRenderObjects(mjx_model.meshGeo, *render_mgr);
-            sim_cfg.renderBridge = render_mgr->bridge();
-        } else {
-            sim_cfg.renderBridge = nullptr;
-        }
+        loadRenderObjects(mjx_model.meshGeo, render_mgr);
+        sim_cfg.renderBridge = render_mgr.bridge();
 
         sim_cfg.geomTypes = mjx_model.geomTypes;
         sim_cfg.geomDataIDs = mjx_model.geomDataIDs;
@@ -431,6 +452,7 @@ Manager::Impl * Manager::Impl::make(
         auto cpu_impl = new CPUImpl {
             mgr_cfg,
             mjx_model.numGeoms,
+            mjx_model.numCams,
             std::move(render_gpu_state),
             std::move(render_mgr),
             std::move(cpu_exec),
@@ -455,9 +477,10 @@ void Manager::init()
     impl_->init();
 }
 
-void Manager::render(math::Vector3 *geom_pos, math::Quat *geom_rot)
+void Manager::render(math::Vector3 *geom_pos, math::Quat *geom_rot,
+                     math::Vector3 *cam_pos, math::Quat *cam_rot)
 {
-    impl_->render(geom_pos, geom_rot);
+    impl_->render(geom_pos, geom_rot, cam_pos, cam_rot);
 }
 
 #ifdef MADRONA_CUDA_SUPPORT
@@ -495,8 +518,8 @@ Tensor Manager::cameraPositionsTensor() const
                                TensorElementType::Float32,
                                {
                                    impl_->cfg.numWorlds,
-                                   2,
-                                   sizeof(Quat) / sizeof(float),
+                                   impl_->numCams,
+                                   sizeof(Vector3) / sizeof(float),
                                });
 }
 
@@ -506,14 +529,14 @@ Tensor Manager::cameraRotationsTensor() const
                                TensorElementType::Float32,
                                {
                                    impl_->cfg.numWorlds,
-                                   2,
+                                   impl_->numCams,
                                    sizeof(Quat) / sizeof(float),
                                });
 }
 
 Tensor Manager::rgbTensor() const
 {
-    const uint8_t *rgb_ptr = impl_->renderMgr->batchRendererRGBOut();
+    const uint8_t *rgb_ptr = impl_->renderMgr.batchRendererRGBOut();
 
     return Tensor((void*)rgb_ptr, TensorElementType::UInt8, {
         impl_->cfg.numWorlds,
@@ -525,7 +548,7 @@ Tensor Manager::rgbTensor() const
 
 Tensor Manager::depthTensor() const
 {
-    const float *depth_ptr = impl_->renderMgr->batchRendererDepthOut();
+    const float *depth_ptr = impl_->renderMgr.batchRendererDepthOut();
 
     return Tensor((void *)depth_ptr, TensorElementType::Float32, {
         impl_->cfg.numWorlds,
@@ -542,7 +565,7 @@ uint32_t Manager::numWorlds() const
 
 render::RenderManager & Manager::getRenderManager()
 {
-    return *impl_->renderMgr;
+    return impl_->renderMgr;
 }
 
 }

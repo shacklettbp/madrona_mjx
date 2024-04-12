@@ -54,8 +54,8 @@ TaskGraph::NodeID queueSortByWorld(TaskGraph::Builder &builder,
 static void setupInitTasks(TaskGraphBuilder &builder)
 {
 #ifdef MADRONA_GPU_MODE
-    auto sort_sys = queueSortByWorld<RenderEntity>(builder, {});
-    sort_sys = queueSortByWorld<CameraEntity>(builder, {sort_sys});
+    auto sort_sys = queueSortByWorld<CameraEntity>(builder, {});
+    sort_sys = queueSortByWorld<RenderEntity>(builder, {sort_sys});
 
     setupRenderTasks(builder, {sort_sys});
 #else
@@ -80,12 +80,6 @@ Sim::Sim(Engine &ctx,
     : WorldBase(ctx)
 {
     RenderingSystem::init(ctx, cfg.renderBridge);
-
-    Entity cam = ctx.makeEntity<CameraEntity>();
-    ctx.get<Position>(cam) = Vector3 { 0, -3, 0 };
-    ctx.get<Rotation>(cam) = Quat { 1, 0, 0, 0 };
-    render::RenderingSystem::attachEntityToView(
-        ctx, cam, 60.f, 0.001f, Vector3::zero());
 
     for (CountT geom_idx = 0; geom_idx < (CountT)cfg.numGeoms; geom_idx++) {
         Entity instance = ctx.makeRenderableEntity<RenderEntity>();
@@ -120,6 +114,14 @@ Sim::Sim(Engine &ctx,
         }
         ctx.get<Scale>(instance) = scale;
         ctx.get<ObjectID>(instance) = ObjectID { render_obj_idx };
+    }
+
+    for (CountT cam_idx = 0; cam_idx < (CountT)cfg.numCams; cam_idx++) {
+        Entity cam = ctx.makeEntity<CameraEntity>();
+        ctx.get<Position>(cam) = Vector3::zero();
+        ctx.get<Rotation>(cam) = Quat { 1, 0, 0, 0 };
+        render::RenderingSystem::attachEntityToView(
+            ctx, cam, 60.f, 0.001f, Vector3::zero());
     }
 }
 

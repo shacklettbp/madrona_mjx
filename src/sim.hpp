@@ -39,6 +39,7 @@ struct Sim : public madrona::WorldBase {
         int32_t *geomDataIDs;
         Vector3 *geomSizes;
         uint32_t numGeoms;
+        uint32_t numCams;
         const madrona::render::RenderECSBridge *renderBridge;
     };
 

@@ -439,6 +439,7 @@ class Simulator:
     geom_types = self.mjx.sys.geom_type
     geom_data_ids = self.mjx.sys.geom_dataid
     geom_sizes = jax.device_get(self.mjx.sys.geom_size)
+    num_cams = self.mjx.sys.ncam
 
     self.madrona = SimManager(
         exec_mode = madrona.ExecMode.CPU if cpu_madrona else madrona.ExecMode.CUDA,
@@ -450,6 +451,7 @@ class Simulator:
         geom_types = geom_types,
         geom_data_ids = geom_data_ids,
         geom_sizes = geom_sizes,
+        num_cams = num_cams,
         num_worlds = num_worlds,
         batch_render_view_width = batch_render_view_width,
         batch_render_view_height = batch_render_view_height,
@@ -457,19 +459,19 @@ class Simulator:
     )
     self.madrona.init()
 
+    @jax.vmap
+    def mult_quat(u, v):
+        return jp.array([
+            u[0] * v[0] - u[1] * v[1] - u[2] * v[2] - u[3] * v[3],
+            u[0] * v[1] + u[1] * v[0] + u[2] * v[3] - u[3] * v[2],
+            u[0] * v[2] - u[1] * v[3] + u[2] * v[0] + u[3] * v[1],
+            u[0] * v[3] + u[1] * v[2] - u[2] * v[1] + u[3] * v[0],
+        ])
+
     # MJX computes this internally but unfortunately transforms the result to
     # a matrix, Madrona needs a quaternion
     def compute_geom_quats(state, m):
         xquat = state.xquat
-
-        @jax.vmap
-        def mult_quat(u, v):
-            return jp.array([
-                u[0] * v[0] - u[1] * v[1] - u[2] * v[2] - u[3] * v[3],
-                u[0] * v[1] + u[1] * v[0] + u[2] * v[3] - u[3] * v[2],
-                u[0] * v[2] - u[1] * v[3] + u[2] * v[0] + u[3] * v[1],
-                u[0] * v[3] + u[1] * v[2] - u[2] * v[1] + u[3] * v[0],
-            ])
 
         world_quat = state.xquat[m.geom_bodyid]
         local_quat = m.geom_quat
@@ -477,29 +479,46 @@ class Simulator:
         composed = mult_quat(world_quat, local_quat)
 
         n = jp.linalg.norm(composed, ord=2, axis=-1, keepdims=True)
+        return composed / (n + 1e-6 * (n == 0.0))
 
+    def compute_cam_quats(state, m):
+        xquat = state.xquat
+
+        world_quat = state.xquat[m.cam_bodyid]
+        local_quat = m.cam_quat
+
+        composed = mult_quat(world_quat, local_quat)
+
+        n = jp.linalg.norm(composed, ord=2, axis=-1, keepdims=True)
         return composed / (n + 1e-6 * (n == 0.0))
 
     self.compute_geom_quats = jax.jit(
         jax.vmap(compute_geom_quats, in_axes=(0, None)))
+
+    self.compute_cam_quats = jax.jit(
+        jax.vmap(compute_cam_quats, in_axes=(0, None)))
 
     #self.depth = self.madrona.depth_tensor().to_torch()
     #self.rgb = self.madrona.rgb_tensor().to_torch()
 
   def reset(self, rng):
     mjx_state = self.mjx_reset(rng)
+
+    #import code
+    #code.interact(local=locals())
+
     return mjx_state
 
   def step(self, mjx_state, ctrl):
     mjx_state = self.mjx_step(mjx_state, ctrl)
 
-    #import code
-    #code.interact(local=locals())
-
     geom_quat = self.compute_geom_quats(mjx_state.pipeline_state, self.mjx.sys)
+    cam_quat = self.compute_cam_quats(mjx_state.pipeline_state, self.mjx.sys)
 
     self.madrona.render(jax.dlpack.to_dlpack(mjx_state.pipeline_state.geom_xpos),
-                        jax.dlpack.to_dlpack(geom_quat))
+                        jax.dlpack.to_dlpack(geom_quat),
+                        jax.dlpack.to_dlpack(mjx_state.pipeline_state.cam_xpos),
+                        jax.dlpack.to_dlpack(cam_quat))
 
     return mjx_state
 

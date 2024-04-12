@@ -37,6 +37,7 @@ NB_MODULE(madrona_mjx_sim, m) {
                 nb::device::cpu> geom_data_ids,
             nb::ndarray<const int32_t, nb::shape<-1, 3>,
                 nb::device::cpu> geom_sizes,
+            int64_t num_cams,
             int64_t num_worlds,
             int64_t batch_render_view_width,
             int64_t batch_render_view_height,
@@ -58,6 +59,7 @@ NB_MODULE(madrona_mjx_sim, m) {
                 .geomDataIDs = (int32_t *)geom_data_ids.data(),
                 .geomSizes = (math::Vector3 *)geom_sizes.data(),
                 .numGeoms = (uint32_t)geom_types.shape(0),
+                .numCams = (uint32_t)num_cams,
             };
 
             new (self) Manager(Manager::Config {
@@ -77,6 +79,7 @@ NB_MODULE(madrona_mjx_sim, m) {
            nb::arg("geom_types"),
            nb::arg("geom_data_ids"),
            nb::arg("geom_sizes"),
+           nb::arg("num_cams"),
            nb::arg("num_worlds"),
            nb::arg("batch_render_view_width"),
            nb::arg("batch_render_view_height"),
@@ -85,10 +88,15 @@ NB_MODULE(madrona_mjx_sim, m) {
         .def("init", &Manager::init)
         .def("render", [](Manager &mgr,
                           nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_pos,
-                          nb::ndarray<const float, nb::shape<-1, -1, 4>> geom_rot)
+                          nb::ndarray<const float, nb::shape<-1, -1, 4>> geom_rot,
+                          nb::ndarray<const float, nb::shape<-1, -1, 3>> cam_pos,
+                          nb::ndarray<const float, nb::shape<-1, -1, 4>> cam_rot)
+
         {
             mgr.render((math::Vector3 *)geom_pos.data(),
-                       (math::Quat *)geom_rot.data());
+                       (math::Quat *)geom_rot.data(),
+                       (math::Vector3 *)cam_pos.data(),
+                       (math::Quat *)cam_rot.data());
         })
         .def("render_async", [](Manager &mgr, int64_t strm) {
             mgr.renderAsync((cudaStream_t)strm);
