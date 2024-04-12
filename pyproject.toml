@@ -7,10 +7,7 @@ backend-path = ["external/madrona/py"]
 name = "madrona_mjx"
 version = "0.0.1"
 
-[tool.madrona.packages.madrona_mjx_sim]
-ext-only = true
+[tool.madrona.packages.madrona_mjx]
+path = "src/madrona_mjx"
 ext-out-dir = "build"
-
-[tool.madrona.packages.madrona_mjx_viz]
-ext-only = true
-ext-out-dir = "build"
+extensions = [ "_madrona_mjx_batch_renderer", "_madrona_mjx_visualizer" ]

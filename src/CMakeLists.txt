@@ -53,25 +53,25 @@ target_compile_definitions(madmjx_mgr PRIVATE
     -DDATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data/"
 )
 
-madrona_python_module(madrona_mjx_sim
+madrona_python_module(_madrona_mjx_batch_renderer
     bindings.cpp
 )
 
-target_link_libraries(madrona_mjx_sim PRIVATE
+target_link_libraries(_madrona_mjx_batch_renderer PRIVATE
     madmjx_mgr
 )
 
 if (TARGET madrona_viz)
-    madrona_python_module(madrona_mjx_viz
+    madrona_python_module(_madrona_mjx_visualizer
         viewer.cpp
     )
 
-    target_link_libraries(madrona_mjx_viz PRIVATE 
+    target_link_libraries(_madrona_mjx_visualizer PRIVATE 
         madrona_viz madmjx_mgr
     )
 
     if (TARGET madrona_cuda)
-        target_link_libraries(madrona_mjx_viz PRIVATE
+        target_link_libraries(_madrona_mjx_visualizer PRIVATE
             madrona_cuda
         )
     endif()

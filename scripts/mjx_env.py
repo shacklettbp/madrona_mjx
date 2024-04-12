@@ -1,10 +1,9 @@
-import math
-import sys
-from typing import Optional, Any, List, Sequence, Dict, Tuple, Union
 import os
 from os import environ as env_vars
-from functools import partial
+import pathlib
 
+# FIXME, hacky, but need to leave decent chunk of memory for Madrona /
+# the batch renderer
 def limit_jax_mem(limit):
     env_vars["XLA_PYTHON_CLIENT_MEM_FRACTION"] = f"{limit:.2f}"
 limit_jax_mem(0.5)
@@ -12,7 +11,8 @@ limit_jax_mem(0.5)
 import jax
 from jax import random, numpy as jp
 import numpy as np
-from madrona_mjx_sim import SimManager, madrona
+import flax
+from typing import Optional, Any, List, Sequence, Dict, Tuple, Union, Callable
 
 from brax import base
 from brax import envs
@@ -20,14 +20,18 @@ from brax import math
 from brax.base import Base, Motion, Transform
 from brax.envs.base import Env, PipelineEnv, State
 from brax.mjx.base import State as MjxState
+from brax.training.agents.ppo import train as ppo
+from brax.training.agents.ppo import networks as ppo_networks
+from brax.training.acme import running_statistics
 
-from brax.io import mjcf
+from brax.io import mjcf, model
 from ml_collections import config_dict
 
 from etils import epath
 
 import mujoco
 from mujoco import mjx
+
 
 def get_config():
   """Returns reward config for barkour quadruped environment."""
@@ -98,7 +102,9 @@ class BarkourEnv(PipelineEnv):
       kick_vel: float = 0.05,
       **kwargs,
   ):
-    path = epath.Path('external/mujoco_menagerie/google_barkour_vb/scene_mjx.xml')
+    path = epath.Path(os.path.join(
+        pathlib.Path(__file__).parent.resolve(),
+        'mujoco_menagerie/google_barkour_vb/scene_mjx.xml'))
     sys = mjcf.load(path.as_posix())
     self._dt = 0.02  # this environment is 50 fps
     sys = sys.tree_replace({'opt.timestep': 0.004, 'dt': 0.004})
@@ -416,109 +422,56 @@ class BarkourEnv(PipelineEnv):
 
 envs.register_environment('barkour', BarkourEnv)
 
-class Simulator:
-  def __init__(
-      self,
-      gpu_id,
-      num_worlds,
-      batch_render_view_width,
-      batch_render_view_height,
-      cpu_madrona,
-      viz_gpu_hdls=None,
-  ):
-    self.mjx = envs.get_environment('barkour')
-    self.mjx_reset = jax.jit(jax.vmap(self.mjx.reset))
-    self.mjx_step = jax.jit(jax.vmap(self.mjx.step))
 
-    # Initialize madrona simulator
+def policy_init(env, env_state):
+  ppo_network = ppo_networks.make_ppo_networks(
+      env_state.obs.shape[-1],
+      env.action_size,
+      preprocess_observations_fn=running_statistics.normalize,
+      policy_hidden_layer_sizes=(128, 128, 128, 128))
 
-    mesh_verts = self.mjx.sys.mesh_vert
-    mesh_faces = self.mjx.sys.mesh_face
-    mesh_vert_offsets = self.mjx.sys.mesh_vertadr
-    mesh_face_offsets = self.mjx.sys.mesh_faceadr
-    geom_types = self.mjx.sys.geom_type
-    geom_data_ids = self.mjx.sys.geom_dataid
-    geom_sizes = jax.device_get(self.mjx.sys.geom_size)
-    num_cams = self.mjx.sys.ncam
+  make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
 
-    self.madrona = SimManager(
-        exec_mode = madrona.ExecMode.CPU if cpu_madrona else madrona.ExecMode.CUDA,
-        gpu_id = gpu_id,
-        mesh_vertices = mesh_verts,
-        mesh_faces = mesh_faces,
-        mesh_vertex_offsets = mesh_vert_offsets,
-        mesh_face_offsets = mesh_face_offsets,
-        geom_types = geom_types,
-        geom_data_ids = geom_data_ids,
-        geom_sizes = geom_sizes,
-        num_cams = num_cams,
-        num_worlds = num_worlds,
-        batch_render_view_width = batch_render_view_width,
-        batch_render_view_height = batch_render_view_height,
-        visualizer_gpu_handles = viz_gpu_hdls,
+  params = model.load_params(os.path.join(
+    pathlib.Path(__file__).parent.resolve(), "mjx_brax_quadruped_policy"))
+  inference_fn = make_inference_fn(params)
+
+  def wrapper(state, rng):
+    ctrl, _ = inference_fn(state.obs, rng)
+    return ctrl
+
+  return jax.jit(wrapper)
+
+
+# Simple wrapper class for profiling
+class MJXEnvAndPolicy(flax.struct.PyTreeNode):
+  env: PipelineEnv = flax.struct.field(pytree_node=False)
+  mjx_step_fn: Callable = flax.struct.field(pytree_node=False)
+  policy_inference_fn: Callable = flax.struct.field(pytree_node=False)
+  mjx_state: Any
+  step_rng: random.key
+
+  @staticmethod
+  def create(rng, num_worlds):
+    env = envs.get_environment('barkour')
+    reset_fn = jax.jit(jax.vmap(env.reset))
+    step_fn = jax.jit(jax.vmap(env.step))
+
+    rng, step_rng = random.split(rng, 2)
+    mjx_state = reset_fn(random.split(rng, num_worlds))
+    policy_inference_fn = policy_init(env, mjx_state)
+
+    return MJXEnvAndPolicy(
+        env=env,
+        mjx_step_fn=step_fn,
+        policy_inference_fn=policy_inference_fn,
+        mjx_state=mjx_state,
+        step_rng=step_rng,
     )
-    self.madrona.init()
 
-    @jax.vmap
-    def mult_quat(u, v):
-        return jp.array([
-            u[0] * v[0] - u[1] * v[1] - u[2] * v[2] - u[3] * v[3],
-            u[0] * v[1] + u[1] * v[0] + u[2] * v[3] - u[3] * v[2],
-            u[0] * v[2] - u[1] * v[3] + u[2] * v[0] + u[3] * v[1],
-            u[0] * v[3] + u[1] * v[2] - u[2] * v[1] + u[3] * v[0],
-        ])
+  def step(self):
+    rng, cur_rng = random.split(self.step_rng, 2) 
+    ctrl = self.policy_inference_fn(self.mjx_state, cur_rng)
+    mjx_state = self.mjx_step_fn(self.mjx_state, ctrl)
 
-    # MJX computes this internally but unfortunately transforms the result to
-    # a matrix, Madrona needs a quaternion
-    def compute_geom_quats(state, m):
-        xquat = state.xquat
-
-        world_quat = state.xquat[m.geom_bodyid]
-        local_quat = m.geom_quat
-
-        composed = mult_quat(world_quat, local_quat)
-
-        n = jp.linalg.norm(composed, ord=2, axis=-1, keepdims=True)
-        return composed / (n + 1e-6 * (n == 0.0))
-
-    def compute_cam_quats(state, m):
-        xquat = state.xquat
-
-        world_quat = state.xquat[m.cam_bodyid]
-        local_quat = m.cam_quat
-
-        composed = mult_quat(world_quat, local_quat)
-
-        n = jp.linalg.norm(composed, ord=2, axis=-1, keepdims=True)
-        return composed / (n + 1e-6 * (n == 0.0))
-
-    self.compute_geom_quats = jax.jit(
-        jax.vmap(compute_geom_quats, in_axes=(0, None)))
-
-    self.compute_cam_quats = jax.jit(
-        jax.vmap(compute_cam_quats, in_axes=(0, None)))
-
-    #self.depth = self.madrona.depth_tensor().to_torch()
-    #self.rgb = self.madrona.rgb_tensor().to_torch()
-
-  def reset(self, rng):
-    mjx_state = self.mjx_reset(rng)
-
-    #import code
-    #code.interact(local=locals())
-
-    return mjx_state
-
-  def step(self, mjx_state, ctrl):
-    mjx_state = self.mjx_step(mjx_state, ctrl)
-
-    geom_quat = self.compute_geom_quats(mjx_state.pipeline_state, self.mjx.sys)
-    cam_quat = self.compute_cam_quats(mjx_state.pipeline_state, self.mjx.sys)
-
-    self.madrona.render(jax.dlpack.to_dlpack(mjx_state.pipeline_state.geom_xpos),
-                        jax.dlpack.to_dlpack(geom_quat),
-                        jax.dlpack.to_dlpack(mjx_state.pipeline_state.cam_xpos),
-                        jax.dlpack.to_dlpack(cam_quat))
-
-    return mjx_state
-
+    return self.replace(mjx_state=mjx_state, step_rng=rng)

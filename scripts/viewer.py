@@ -1,12 +1,12 @@
-from sim import Simulator
-from madrona_mjx_viz import VisualizerGPUState, Visualizer
-
 import jax
 from jax import random, numpy as jp
 
+from madrona_mjx import BatchRenderer 
+from madrona_mjx.viz import VisualizerGPUState, Visualizer
+
 import argparse
 
-from mjx_policy import policy_init
+from mjx_env import MJXEnvAndPolicy
 
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('--gpu-id', type=int, default=0)
@@ -16,37 +16,23 @@ arg_parser.add_argument('--window-height', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-width', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-height', type=int, required=True)
 
-arg_parser.add_argument('--cpu-sim', action='store_true')
-
 args = arg_parser.parse_args()
 
 viz_gpu_state = VisualizerGPUState(args.window_width, args.window_height, args.gpu_id)
 
-sim = Simulator(args.gpu_id, args.num_worlds,
-                args.batch_render_view_width, args.batch_render_view_height,
-                args.cpu_sim, viz_gpu_state.get_gpu_handles())
+mjx_wrapper = MJXEnvAndPolicy.create(random.key(0), args.num_worlds)
 
-visualizer = Visualizer(viz_gpu_state, sim.madrona)
+renderer = BatchRenderer(
+    mjx_wrapper.env, mjx_wrapper.mjx_state, args.gpu_id, args.num_worlds,
+    args.batch_render_view_width, args.batch_render_view_height,
+    False, viz_gpu_state.get_gpu_handles())
 
-@jax.jit
-def init_sim_state(rng):
-    rng, init_rng = random.split(rng, 2)
+def step_fn(mjx_wrapper):
+  mjx_wrapper = mjx_wrapper.step()
 
-    init_mjx_state = sim.reset(random.split(init_rng, args.num_worlds))
+  renderer.render(mjx_wrapper.mjx_state)
 
-    return init_mjx_state, rng
+  return mjx_wrapper
 
-init_mjx_state, rng = init_sim_state(random.key(0))
-
-policy_inference_fn = policy_init(sim.mjx, init_mjx_state)
-
-def step_fn(carry):
-    mjx_state, rng = carry
-
-    rng, step_rng = random.split(rng, 2)
-    ctrl = policy_inference_fn(mjx_state, step_rng)
-    mjx_state = sim.step(mjx_state, ctrl)
-
-    return mjx_state, rng
-
-visualizer.loop(sim.madrona, step_fn, (init_mjx_state, rng))
+visualizer = Visualizer(viz_gpu_state, renderer.madrona)
+visualizer.loop(renderer.madrona, step_fn, mjx_wrapper)

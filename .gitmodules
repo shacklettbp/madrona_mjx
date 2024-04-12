@@ -1,6 +1,6 @@
 [submodule "external/madrona"]
 	path = external/madrona
 	url = https://github.com/shacklettbp/madrona.git
-[submodule "external/mujoco_menagerie"]
-	path = external/mujoco_menagerie
-	url = git@github.com:google-deepmind/mujoco_menagerie.git
+[submodule "scripts/mujoco_menagerie"]
+	path = scripts/mujoco_menagerie
+	url = https://github.com/google-deepmind/mujoco_menagerie

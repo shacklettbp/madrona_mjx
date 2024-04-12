@@ -11,14 +11,14 @@ namespace madMJX {
 
 // This file creates the python bindings used by the learning code.
 // Refer to the nanobind documentation for more details on these functions.
-NB_MODULE(madrona_mjx_sim, m) {
+NB_MODULE(_madrona_mjx_batch_renderer, m) {
     // Each simulator has a madrona submodule that includes base types
     // like madrona::py::Tensor and madrona::py::PyExecMode.
     madrona::py::setupMadronaSubmodule(m);
 
     nb::class_<VisualizerGPUHandles>(m, "VisualizerGPUHandles");
 
-    nb::class_<Manager>(m, "SimManager")
+    nb::class_<Manager>(m, "MadronaBatchRenderer")
         .def("__init__", [](
             Manager *self,
             madrona::py::PyExecMode exec_mode,
@@ -85,7 +85,18 @@ NB_MODULE(madrona_mjx_sim, m) {
            nb::arg("batch_render_view_height"),
            nb::arg("visualizer_gpu_handles") = nb::none(),
            nb::keep_alive<1, 15>())
-        .def("init", &Manager::init)
+        .def("init", [](Manager &mgr,
+                        nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_pos,
+                        nb::ndarray<const float, nb::shape<-1, -1, 4>> geom_rot,
+                        nb::ndarray<const float, nb::shape<-1, -1, 3>> cam_pos,
+                        nb::ndarray<const float, nb::shape<-1, -1, 4>> cam_rot)
+
+        {
+            mgr.init((math::Vector3 *)geom_pos.data(),
+                     (math::Quat *)geom_rot.data(),
+                     (math::Vector3 *)cam_pos.data(),
+                     (math::Quat *)cam_rot.data());
+        })
         .def("render", [](Manager &mgr,
                           nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_pos,
                           nb::ndarray<const float, nb::shape<-1, -1, 4>> geom_rot,

@@ -3,9 +3,9 @@
 ## Installation
 
 ```sh
-git clone --recursive git@github.com:shacklettbp/madrona_mjxtype.git
+git clone --recursive git@github.com:shacklettbp/madrona_mjx.git
 
-cd madrona_mjxtype
+cd madrona_mjx
 mkdir build
 cd build
 cmake ..
@@ -22,11 +22,11 @@ pip install -e .
 Launch the viewer with the following command:
 
 ```sh
-MADRONA_MWGPU_KERNEL_CACHE=build/cache python scripts/viewer.py --num-worlds 10 --window-width 2730 --window-height 1536
+MADRONA_MWGPU_KERNEL_CACHE=build/cache python scripts/viewer.py --num-worlds 1024 --window-width 2730 --window-height 1536 --batch-render-view-width 64 --batch-render-view-height 64
 ```
 
 Headless profiling:
 
 ```sh
-MADRONA_MWGPU_KERNEL_CACHE=build/cache python scripts/headless.py --num-worlds 16384 --num-steps 1000
+MADRONA_MWGPU_KERNEL_CACHE=build/cache python scripts/headless.py --num-worlds 1024 --num-steps 1000 --batch-render-view-width 64 --batch-render-view-height 64
 ```

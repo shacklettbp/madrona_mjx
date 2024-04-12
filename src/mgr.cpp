@@ -104,7 +104,8 @@ struct Manager::Impl {
 
     inline virtual ~Impl() {}
 
-    virtual void init() = 0;
+    virtual void init(Vector3 *geom_positions, Quat *geom_rotations,
+                      Vector3 *cam_positions, Quat *cam_rotations) = 0;
     virtual void render(Vector3 *geom_positions, Quat *geom_rotations,
                         Vector3 *cam_positions, Quat *cam_rotations) = 0;
 
@@ -147,16 +148,10 @@ struct Manager::CPUImpl final : Manager::Impl {
 
     inline virtual ~CPUImpl() final {}
 
-    inline virtual void init() final
-    {
-        cpuExec.runTaskGraph(TaskGraphID::Init);
-        renderCommon();
-    }
-
-    inline virtual void render(Vector3 *geom_positions,
-                               Quat *geom_rotations,
-                               Vector3 *cam_positions,
-                               Quat *cam_rotations) final
+    inline void copyInTransforms(Vector3 *geom_positions,
+                                 Quat *geom_rotations,
+                                 Vector3 *cam_positions,
+                                 Quat *cam_rotations)
     {
         memcpy(cpuExec.getExported((CountT)ExportID::InstancePositions),
                geom_positions,
@@ -171,8 +166,28 @@ struct Manager::CPUImpl final : Manager::Impl {
         memcpy(cpuExec.getExported((CountT)ExportID::CameraRotations),
                cam_rotations,
                sizeof(Quat) * numCams * cfg.numWorlds);
+    }
 
+    inline virtual void init(Vector3 *geom_positions,
+                             Quat *geom_rotations,
+                             Vector3 *cam_positions,
+                             Quat *cam_rotations) final
+    {
+        copyInTransforms(geom_positions, geom_rotations,
+                         cam_positions, cam_rotations);
+        cpuExec.runTaskGraph(TaskGraphID::Init);
+        renderCommon();
+    }
+
+    inline virtual void render(Vector3 *geom_positions,
+                               Quat *geom_rotations,
+                               Vector3 *cam_positions,
+                               Quat *cam_rotations) final
+    {
+        copyInTransforms(geom_positions, geom_rotations,
+                         cam_positions, cam_rotations);
         cpuExec.runTaskGraph(TaskGraphID::Render);
+        renderCommon();
     }
 
 #ifdef MADRONA_CUDA_SUPPORT
@@ -211,18 +226,10 @@ struct Manager::CUDAImpl final : Manager::Impl {
 
     inline virtual ~CUDAImpl() final {}
 
-    inline virtual void init() final
-    {
-        MWCudaLaunchGraph init_graph =
-            gpuExec.buildLaunchGraph(TaskGraphID::Init);
-
-        gpuExec.run(init_graph);
-    }
-
-    inline virtual void render(Vector3 *geom_positions,
-                               Quat *geom_rotations,
-                               Vector3 *cam_positions,
-                               Quat *cam_rotations) final
+    inline void copyInTransforms(Vector3 *geom_positions,
+                                 Quat *geom_rotations,
+                                 Vector3 *cam_positions,
+                                 Quat *cam_rotations)
     {
         cudaMemcpy(gpuExec.getExported((CountT)ExportID::InstancePositions),
                    geom_positions,
@@ -241,6 +248,29 @@ struct Manager::CUDAImpl final : Manager::Impl {
                    cam_rotations,
                    sizeof(Quat) * numCams * cfg.numWorlds,
                    cudaMemcpyDeviceToDevice);
+    }
+
+    inline virtual void init(Vector3 *geom_positions,
+                             Quat *geom_rotations,
+                             Vector3 *cam_positions,
+                             Quat *cam_rotations) final
+    {
+        MWCudaLaunchGraph init_graph =
+            gpuExec.buildLaunchGraph(TaskGraphID::Init);
+
+        copyInTransforms(geom_positions, geom_rotations,
+                         cam_positions, cam_rotations);
+        gpuExec.run(init_graph);
+        renderCommon();
+    }
+
+    inline virtual void render(Vector3 *geom_positions,
+                               Quat *geom_rotations,
+                               Vector3 *cam_positions,
+                               Quat *cam_rotations) final
+    {
+        copyInTransforms(geom_positions, geom_rotations,
+                         cam_positions, cam_rotations);
 
         gpuExec.run(renderGraph);
         renderCommon();
@@ -472,9 +502,10 @@ Manager::Manager(const Config &cfg,
 
 Manager::~Manager() {}
 
-void Manager::init()
+void Manager::init(math::Vector3 *geom_pos, math::Quat *geom_rot,
+                   math::Vector3 *cam_pos, math::Quat *cam_rot)
 {
-    impl_->init();
+    impl_->init(geom_pos, geom_rot, cam_pos, cam_rot);
 }
 
 void Manager::render(math::Vector3 *geom_pos, math::Quat *geom_rot,
