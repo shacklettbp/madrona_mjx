@@ -22,7 +22,7 @@ pip install -e .
 Launch the viewer with the following command:
 
 ```sh
-MADRONA_MWGPU_KERNEL_CACHE=build/cache python scripts/viewer.py --num-worlds 1024 --window-width 2730 --window-height 1536 --batch-render-view-width 64 --batch-render-view-height 64
+MADRONA_MWGPU_KERNEL_CACHE=build/cache python scripts/viewer.py --num-worlds 16 --window-width 2730 --window-height 1536 --batch-render-view-width 64 --batch-render-view-height 64
 ```
 
 Headless profiling:
