@@ -27,8 +27,12 @@ renderer = BatchRenderer(
     args.batch_render_view_width, args.batch_render_view_height,
     False, viz_gpu_state.get_gpu_handles())
 
+@jax.jit
+def wrapper_step(mjx_wrapper):
+  return mjx_wrapper.step()
+
 def step_fn(mjx_wrapper):
-  mjx_wrapper = mjx_wrapper.step()
+  mjx_wrapper = wrapper_step(mjx_wrapper)
 
   # Note that the renderer prim is effectful so it won't get optimized out
   # even if not used
