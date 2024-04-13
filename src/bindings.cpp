@@ -109,15 +109,44 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
                        (math::Vector3 *)cam_pos.data(),
                        (math::Quat *)cam_rot.data());
         })
-        .def("render_async", [](Manager &mgr, int64_t strm) {
-            mgr.renderAsync((cudaStream_t)strm);
-        })
         .def("instance_positions_tensor", &Manager::instancePositionsTensor)
         .def("instance_rotations_tensor", &Manager::instanceRotationsTensor)
         .def("camera_positions_tensor", &Manager::cameraPositionsTensor)
         .def("camera_rotations_tensor", &Manager::cameraRotationsTensor)
         .def("rgb_tensor", &Manager::rgbTensor)
         .def("depth_tensor", &Manager::depthTensor)
+        .def("xla_entries", [](Manager &mgr)
+        {
+            Manager *mgr_ptr = &mgr;
+            auto sim_encode = nb::bytes((char *)&mgr_ptr, sizeof(char *));
+
+            void (*gpu_init_fn)(cudaStream_t, void **, const char *, size_t) = [](
+                cudaStream_t strm, void **buffers, const char *opaque, size_t)
+            {
+                Manager *mgr = *(Manager **)opaque;
+
+                // The first buffer entry is a token JAX uses for ordering,
+                // skip over it
+                mgr->gpuStreamInit(strm, buffers + 1);
+            };
+
+            void (*gpu_render_fn)(cudaStream_t, void **, const char *, size_t) = [](
+                cudaStream_t strm, void **buffers, const char *opaque, size_t)
+            {
+                Manager *mgr = *(Manager **)opaque;
+
+                // The first buffer entry is a token JAX uses for ordering,
+                // skip over it
+                mgr->gpuStreamRender(strm, buffers + 1);
+            };
+
+            return nb::make_tuple(
+                sim_encode,
+                nb::capsule(std::bit_cast<void *>(gpu_init_fn), 
+                            "xla._CUSTOM_CALL_TARGET"),
+                nb::capsule(std::bit_cast<void *>(gpu_render_fn), 
+                            "xla._CUSTOM_CALL_TARGET"));
+        })
     ;
 }
 

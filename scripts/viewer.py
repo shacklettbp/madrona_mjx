@@ -30,9 +30,14 @@ renderer = BatchRenderer(
 def step_fn(mjx_wrapper):
   mjx_wrapper = mjx_wrapper.step()
 
+  # Note that the renderer prim is effectful so it won't get optimized out
+  # even if not used
   renderer.render(mjx_wrapper.mjx_state)
-
   return mjx_wrapper
+
+step_fn = jax.jit(step_fn)
+#step_fn = step_fn.lower(mjx_wrapper)
+#step_fn = step_fn.compile()
 
 visualizer = Visualizer(viz_gpu_state, renderer.madrona)
 visualizer.loop(renderer.madrona, step_fn, mjx_wrapper)

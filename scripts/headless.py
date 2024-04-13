@@ -7,6 +7,8 @@ from time import time
 
 from mjx_env import MJXEnvAndPolicy
 
+import sys
+
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('--gpu-id', type=int, default=0)
 arg_parser.add_argument('--num-worlds', type=int, required=True)
@@ -22,18 +24,20 @@ renderer = BatchRenderer(
     mjx_wrapper.env, mjx_wrapper.mjx_state, args.gpu_id, args.num_worlds,
     args.batch_render_view_width, args.batch_render_view_height, False)
 
-@jax.jit
-def mjx_step_wrapper(mjx_wrapper):
-  return mjx_wrapper.step()
+def step_fn(mjx_wrapper):
+  mjx_wrapper = mjx_wrapper.step()
+  rgb, depth = renderer.render(mjx_wrapper.mjx_state)
 
-# Trigger jit
-mjx_wrapper = mjx_step_wrapper(mjx_wrapper)
+  return mjx_wrapper, rgb, depth
+
+step_fn = jax.jit(step_fn)
+step_fn = step_fn.lower(mjx_wrapper)
+step_fn = step_fn.compile()
 
 start = time()
 
 for i in range(args.num_steps):
-  mjx_wrapper = mjx_step_wrapper(mjx_wrapper)
-  renderer.render(mjx_wrapper.mjx_state)
+    mjx_wrapper, rgb, depth = step_fn(mjx_wrapper)
 
 end = time()
 

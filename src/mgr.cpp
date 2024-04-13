@@ -110,7 +110,8 @@ struct Manager::Impl {
                         Vector3 *cam_positions, Quat *cam_rotations) = 0;
 
 #ifdef MADRONA_CUDA_SUPPORT
-    virtual void renderAsync(cudaStream_t strm) = 0;
+    virtual void gpuStreamInit(cudaStream_t strm, void **buffers) = 0;
+    virtual void gpuStreamRender(cudaStream_t strm, void **buffers) = 0;
 #endif
 
     inline void renderCommon()
@@ -191,9 +192,13 @@ struct Manager::CPUImpl final : Manager::Impl {
     }
 
 #ifdef MADRONA_CUDA_SUPPORT
-    virtual void renderAsync(cudaStream_t strm) final
+    virtual void gpuStreamInit(cudaStream_t, void **) final
     {
-        (void)strm;
+        FATAL("madMJX TODO: CPU backend integration");
+    }
+
+    virtual void gpuStreamRender(cudaStream_t, void **) final
+    {
         FATAL("madMJX TODO: CPU backend integration");
     }
 #endif
@@ -229,25 +234,30 @@ struct Manager::CUDAImpl final : Manager::Impl {
     inline void copyInTransforms(Vector3 *geom_positions,
                                  Quat *geom_rotations,
                                  Vector3 *cam_positions,
-                                 Quat *cam_rotations)
+                                 Quat *cam_rotations,
+                                 cudaStream_t strm)
     {
-        cudaMemcpy(gpuExec.getExported((CountT)ExportID::InstancePositions),
-                   geom_positions,
-                   sizeof(Vector3) * numGeoms * cfg.numWorlds,
-                   cudaMemcpyDeviceToDevice);
-        cudaMemcpy(gpuExec.getExported((CountT)ExportID::InstanceRotations),
-                   geom_rotations,
-                   sizeof(Quat) * numGeoms * cfg.numWorlds,
-                   cudaMemcpyDeviceToDevice);
+        cudaMemcpyAsync(
+            gpuExec.getExported((CountT)ExportID::InstancePositions),
+            geom_positions,
+            sizeof(Vector3) * numGeoms * cfg.numWorlds,
+            cudaMemcpyDeviceToDevice, strm);
+        cudaMemcpyAsync(
+            gpuExec.getExported((CountT)ExportID::InstanceRotations),
+            geom_rotations,
+            sizeof(Quat) * numGeoms * cfg.numWorlds,
+            cudaMemcpyDeviceToDevice, strm);
 
-        cudaMemcpy(gpuExec.getExported((CountT)ExportID::CameraPositions),
-                   cam_positions,
-                   sizeof(Vector3) * numCams * cfg.numWorlds,
-                   cudaMemcpyDeviceToDevice);
-        cudaMemcpy(gpuExec.getExported((CountT)ExportID::CameraRotations),
-                   cam_rotations,
-                   sizeof(Quat) * numCams * cfg.numWorlds,
-                   cudaMemcpyDeviceToDevice);
+        cudaMemcpyAsync(
+            gpuExec.getExported((CountT)ExportID::CameraPositions),
+            cam_positions,
+            sizeof(Vector3) * numCams * cfg.numWorlds,
+            cudaMemcpyDeviceToDevice, strm);
+        cudaMemcpyAsync(
+            gpuExec.getExported((CountT)ExportID::CameraRotations),
+            cam_rotations,
+            sizeof(Quat) * numCams * cfg.numWorlds,
+            cudaMemcpyDeviceToDevice, strm);
     }
 
     inline virtual void init(Vector3 *geom_positions,
@@ -259,7 +269,7 @@ struct Manager::CUDAImpl final : Manager::Impl {
             gpuExec.buildLaunchGraph(TaskGraphID::Init);
 
         copyInTransforms(geom_positions, geom_rotations,
-                         cam_positions, cam_rotations);
+                         cam_positions, cam_rotations, 0);
         gpuExec.run(init_graph);
         renderCommon();
     }
@@ -270,19 +280,107 @@ struct Manager::CUDAImpl final : Manager::Impl {
                                Quat *cam_rotations) final
     {
         copyInTransforms(geom_positions, geom_rotations,
-                         cam_positions, cam_rotations);
+                         cam_positions, cam_rotations, 0);
 
         gpuExec.run(renderGraph);
         renderCommon();
     }
 
-    inline virtual void renderAsync(cudaStream_t strm) final
+    struct JAXIO {
+        Vector3 *geomPositions;
+        Quat *geomRotations;
+        Vector3 *camPositions;
+        Quat *camRotations;
+
+        uint8_t *rgbOut;
+        float *depthOut;
+
+        static inline JAXIO make(void **buffers)
+        {
+            CountT buf_idx = 0;
+            auto geom_positions = (Vector3 *)buffers[buf_idx++];
+            auto geom_rotations = (Quat *)buffers[buf_idx++];
+            auto cam_positions = (Vector3 *)buffers[buf_idx++];
+            auto cam_rotations = (Quat *)buffers[buf_idx++];
+            auto rgb_out = (uint8_t *)buffers[buf_idx++];
+            auto depth_out = (float *)buffers[buf_idx++];
+
+            return JAXIO {
+                .geomPositions = geom_positions,
+                .geomRotations = geom_rotations,
+                .camPositions = cam_positions,
+                .camRotations = cam_rotations,
+                .rgbOut = rgb_out,
+                .depthOut = depth_out,
+            };
+        }
+    };
+
+    inline void copyOutRendered(uint8_t *rgb_out, float *depth_out,
+                                cudaStream_t strm)
     {
+        cudaMemcpyAsync(rgb_out, renderMgr.batchRendererRGBOut(),
+                        sizeof(uint8_t) * 4 *
+                        (size_t)cfg.batchRenderViewWidth *
+                        (size_t)cfg.batchRenderViewHeight *
+                        (size_t)cfg.numWorlds *
+                        (size_t)numCams,
+                        cudaMemcpyDeviceToDevice, strm);
+
+        cudaMemcpyAsync(depth_out, renderMgr.batchRendererDepthOut(),
+                        sizeof(float) *
+                        (size_t)cfg.batchRenderViewWidth *
+                        (size_t)cfg.batchRenderViewHeight *
+                        (size_t)cfg.numWorlds *
+                        (size_t)numCams,
+                        cudaMemcpyDeviceToDevice, strm);
+    }
+
+    virtual void gpuStreamInit(cudaStream_t strm, void **buffers) final
+    {
+        MWCudaLaunchGraph init_graph =
+            gpuExec.buildLaunchGraph(TaskGraphID::Init);
+
+        JAXIO jax_io = JAXIO::make(buffers);
+
+        copyInTransforms(jax_io.geomPositions, jax_io.geomRotations,
+                         jax_io.camPositions, jax_io.camRotations, strm);
+
+        gpuExec.runAsync(init_graph, strm);
+        // Currently a CPU sync is needed to read back the total number of
+        // instances for Vulkan
+        REQ_CUDA(cudaStreamSynchronize(strm));
+        renderCommon();
+
+        copyOutRendered(jax_io.rgbOut, jax_io.depthOut, strm);
+    }
+
+    virtual void gpuStreamRender(cudaStream_t strm, void **buffers) final
+    {
+        JAXIO jax_io = JAXIO::make(buffers);
+
+        copyInTransforms(jax_io.geomPositions, jax_io.geomRotations,
+                         jax_io.camPositions, jax_io.camRotations, strm);
+
+#if 0
+        Vector3 *readback_pos = (Vector3 *)malloc(sizeof(Vector3) * numGeoms * cfg.numWorlds);
+        cudaMemcpy(jax_io.geomPositions,
+                   readback_pos,
+                   sizeof(Vector3) * numGeoms * cfg.numWorlds,
+                   cudaMemcpyHostToDevice);
+        printf("%f %f %f\n",
+            readback_pos[1].x,
+            readback_pos[1].y,
+            readback_pos[1].z);
+#endif
+
         gpuExec.runAsync(renderGraph, strm);
         // Currently a CPU sync is needed to read back the total number of
         // instances for Vulkan
         REQ_CUDA(cudaStreamSynchronize(strm));
         renderCommon();
+
+        copyOutRendered(jax_io.rgbOut, jax_io.depthOut, strm);
     }
 
     virtual inline Tensor exportTensor(ExportID slot,
@@ -515,9 +613,14 @@ void Manager::render(math::Vector3 *geom_pos, math::Quat *geom_rot,
 }
 
 #ifdef MADRONA_CUDA_SUPPORT
-void Manager::renderAsync(cudaStream_t strm)
+void Manager::gpuStreamInit(cudaStream_t strm, void **buffers)
 {
-    impl_->renderAsync(strm);
+    impl_->gpuStreamInit(strm, buffers);
+}
+
+void Manager::gpuStreamRender(cudaStream_t strm, void **buffers)
+{
+    impl_->gpuStreamRender(strm, buffers);
 }
 #endif
 
