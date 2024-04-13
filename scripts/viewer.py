@@ -35,7 +35,7 @@ def step_fn(mjx_wrapper):
   renderer.render(mjx_wrapper.mjx_state)
   return mjx_wrapper
 
-step_fn = jax.jit(step_fn)
+#step_fn = jax.jit(step_fn)
 #step_fn = step_fn.lower(mjx_wrapper)
 #step_fn = step_fn.compile()
 
