@@ -85,6 +85,7 @@ for i in range(len(mesh_vert_offsets)):
     gltf_meshes.append(pygltflib.Mesh(primitives=[pygltflib.Primitive(
         attributes=pygltflib.Attributes(POSITION=len(gltf_accessors) - 1),
         indices=len(gltf_accessors) - 2,
+        material=0,
     )]))
 
 geom_xpos = jax.device_get(mjx_wrapper.mjx_state.pipeline_state.geom_xpos[0])
@@ -127,6 +128,13 @@ gltf = pygltflib.GLTF2(
         pygltflib.Buffer(
             byteLength=len(triangles_binary_blob) + len(points_binary_blob)
         )
+    ],
+    materials=[
+        pygltflib.Material(pbrMetallicRoughness=pygltflib.PbrMetallicRoughness(
+            baseColorFactor=[1.0, 1.0, 1.0, 1.0],
+            metallicFactor=0.0,
+            roughnessFactor=1.0,
+        )),
     ],
 )
 gltf.set_binary_blob(triangles_binary_blob + points_binary_blob)
