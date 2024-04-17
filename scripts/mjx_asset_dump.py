@@ -119,7 +119,7 @@ points_binary_blob = mesh_verts.tobytes()
 
 gltf = pygltflib.GLTF2(
     scene=0,
-    scenes=[pygltflib.Scene(nodes=[0])],
+    scenes=[pygltflib.Scene(nodes=list(range(len(gltf_instances))))],
     nodes=gltf_instances,
     meshes=gltf_meshes,
     accessors=gltf_accessors,
