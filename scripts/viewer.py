@@ -22,7 +22,7 @@ viz_gpu_state = VisualizerGPUState(args.window_width, args.window_height, args.g
 
 mjx_wrapper = MJXEnvAndPolicy.create(random.key(0), args.num_worlds)
 
-renderer = BatchRenderer(
+renderer = BatchRenderer.create(
     mjx_wrapper.env, mjx_wrapper.mjx_state, args.gpu_id, args.num_worlds,
     args.batch_render_view_width, args.batch_render_view_height,
     False, viz_gpu_state.get_gpu_handles())
@@ -31,17 +31,19 @@ renderer = BatchRenderer(
 def wrapper_step(mjx_wrapper):
   return mjx_wrapper.step()
 
-def step_fn(mjx_wrapper):
+def step_fn(carry):
+  mjx_wrapper, renderer = carry
+
   mjx_wrapper = wrapper_step(mjx_wrapper)
 
   # Note that the renderer prim is effectful so it won't get optimized out
   # even if not used
-  rgb, depth = renderer.render(mjx_wrapper.mjx_state)
-  return mjx_wrapper
+  renderer, rgb, depth = renderer.render(mjx_wrapper.mjx_state)
+  return mjx_wrapper, renderer
 
 step_fn = jax.jit(step_fn)
-#step_fn = step_fn.lower(mjx_wrapper)
-#step_fn = step_fn.compile()
+step_fn = step_fn.lower((mjx_wrapper, renderer))
+step_fn = step_fn.compile()
 
 visualizer = Visualizer(viz_gpu_state, renderer.madrona)
-visualizer.loop(renderer.madrona, step_fn, mjx_wrapper)
+visualizer.loop(renderer.madrona, step_fn, (mjx_wrapper, renderer))

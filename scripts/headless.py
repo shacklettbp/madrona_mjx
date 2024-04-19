@@ -20,24 +20,24 @@ args = arg_parser.parse_args()
 
 mjx_wrapper = MJXEnvAndPolicy.create(random.key(0), args.num_worlds)
 
-renderer = BatchRenderer(
+renderer = BatchRenderer.create(
     mjx_wrapper.env, mjx_wrapper.mjx_state, args.gpu_id, args.num_worlds,
     args.batch_render_view_width, args.batch_render_view_height, False)
 
-def step_fn(mjx_wrapper):
+def step_fn(mjx_wrapper, renderer):
   mjx_wrapper = mjx_wrapper.step()
-  rgb, depth = renderer.render(mjx_wrapper.mjx_state)
+  renderer, rgb, depth = renderer.render(mjx_wrapper.mjx_state)
 
-  return mjx_wrapper, rgb, depth
+  return mjx_wrapper, renderer, rgb, depth
 
 step_fn = jax.jit(step_fn)
-step_fn = step_fn.lower(mjx_wrapper)
+step_fn = step_fn.lower(mjx_wrapper, renderer)
 step_fn = step_fn.compile()
 
 start = time()
 
 for i in range(args.num_steps):
-    mjx_wrapper, rgb, depth = step_fn(mjx_wrapper)
+    mjx_wrapper, renderer, rgb, depth = step_fn(mjx_wrapper, renderer)
 
 end = time()
 
