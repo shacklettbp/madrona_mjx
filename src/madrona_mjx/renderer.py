@@ -74,6 +74,10 @@ class BatchRenderer:
           u[0] * v[3] + u[1] * v[2] - u[2] * v[1] + u[3] * v[0],
       ])
 
+    def normalize_quat(q):
+      n = jnp.linalg.norm(q, ord=2, axis=-1, keepdims=True)
+      return q / (n + 1e-6 * (n == 0.0))
+
     # MJX computes this internally but unfortunately transforms the result to
     # a matrix, Madrona needs a quaternion
     def compute_geom_quats(state, m):
@@ -82,10 +86,7 @@ class BatchRenderer:
       world_quat = state.xquat[m.geom_bodyid]
       local_quat = m.geom_quat
 
-      composed = mult_quat(world_quat, local_quat)
-
-      n = jnp.linalg.norm(composed, ord=2, axis=-1, keepdims=True)
-      return composed / (n + 1e-6 * (n == 0.0))
+      return normalize_quat(mult_quat(world_quat, local_quat))
 
     def compute_cam_quats(state, m):
       xquat = state.xquat
@@ -93,10 +94,7 @@ class BatchRenderer:
       world_quat = state.xquat[m.cam_bodyid]
       local_quat = m.cam_quat
 
-      composed = mult_quat(world_quat, local_quat)
-
-      n = jnp.linalg.norm(composed, ord=2, axis=-1, keepdims=True)
-      return composed / (n + 1e-6 * (n == 0.0))
+      return normalize_quat(mult_quat(world_quat, local_quat))
 
     @jax.vmap
     def compute_transforms(state):
@@ -114,6 +112,7 @@ class BatchRenderer:
 
     render_init(init_mjx_state)
 
+    @jax.jit
     def render_fn(mjx_state):
       geom_quat, cam_quat = compute_transforms(mjx_state.pipeline_state)
 
@@ -145,10 +144,14 @@ def _setup_jax_primitives(renderer, num_worlds, num_geoms, num_cams,
   ]
         
   renderer_outputs = [
-      jax.ShapeDtypeStruct(shape=(num_worlds, render_height, render_width, 4),
-                           dtype=jnp.uint8),
-      jax.ShapeDtypeStruct(shape=(num_worlds, render_height, render_width, 1),
-                           dtype=jnp.float32),
+      jax.ShapeDtypeStruct(
+          shape=(num_worlds, num_cams, render_height, render_width, 4),
+          dtype=jnp.uint8,
+      ),
+      jax.ShapeDtypeStruct(
+          shape=(num_worlds, num_cams, render_height, render_width, 1),
+          dtype=jnp.float32,
+      ),
   ]
 
   custom_call_prefix = f"{type(renderer).__name__}_{id(renderer)}"
@@ -204,6 +207,7 @@ def _setup_jax_primitives(renderer, num_worlds, num_geoms, num_cams,
     # for gpuEntryFn, which skips the first buffer input.
     token = ctx.tokens_in.get(_RenderEffect)[0]
     inputs = [token, *flattened_inputs]
+
     input_types = [ir.RankedTensorType(i.type) for i in flattened_inputs]
     input_layouts = [_row_major_layout(t.shape) for t in input_types]
     input_types, input_layouts = _prepend_token_to_inputs(
