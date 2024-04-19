@@ -10,7 +10,7 @@ import flax
 
 import numpy as np
 from jax import core, dtypes
-from jax.core import ShapedArray, Effect
+from jax.core import ShapedArray
 from jax.lib import xla_client
 from jax.interpreters import xla
 from jax.interpreters import mlir

@@ -1,5 +1,5 @@
 import jax
-from jax import random, numpy as jp
+from jax import lax, random, numpy as jp
 
 from madrona_mjx import BatchRenderer
 import argparse
@@ -24,20 +24,24 @@ renderer = BatchRenderer.create(
     mjx_wrapper.env, mjx_wrapper.mjx_state, args.gpu_id, args.num_worlds,
     args.batch_render_view_width, args.batch_render_view_height, False)
 
-def step_fn(mjx_wrapper, renderer):
-  mjx_wrapper = mjx_wrapper.step()
-  renderer, rgb, depth = renderer.render(mjx_wrapper.mjx_state)
+def profile_loop(mjx_wrapper, renderer):
+    def iter(i, carry):
+        mjx_wrapper, renderer = carry
 
-  return mjx_wrapper, renderer, rgb, depth
+        mjx_wrapper = mjx_wrapper.step()
+        renderer, rgb, depth = renderer.render(mjx_wrapper.mjx_state)
 
-step_fn = jax.jit(step_fn)
-step_fn = step_fn.lower(mjx_wrapper, renderer)
-step_fn = step_fn.compile()
+        return mjx_wrapper, renderer
+
+    return lax.fori_loop(0, args.num_steps, iter, (mjx_wrapper, renderer))
+
+profile_loop = jax.jit(profile_loop)
+profile_loop = profile_loop.lower(mjx_wrapper, renderer)
+profile_loop = profile_loop.compile()
 
 start = time()
 
-for i in range(args.num_steps):
-    mjx_wrapper, renderer, rgb, depth = step_fn(mjx_wrapper, renderer)
+mjx_wrapper, renderer = profile_loop(mjx_wrapper, renderer)
 
 end = time()
 

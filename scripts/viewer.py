@@ -36,8 +36,6 @@ def step_fn(carry):
 
   mjx_wrapper = wrapper_step(mjx_wrapper)
 
-  # Note that the renderer prim is effectful so it won't get optimized out
-  # even if not used
   renderer, rgb, depth = renderer.render(mjx_wrapper.mjx_state)
   return mjx_wrapper, renderer
 
