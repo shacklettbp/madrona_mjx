@@ -40,8 +40,8 @@ def step_fn(mjx_wrapper):
   return mjx_wrapper
 
 step_fn = jax.jit(step_fn)
-step_fn = step_fn.lower(mjx_wrapper)
-step_fn = step_fn.compile()
+#step_fn = step_fn.lower(mjx_wrapper)
+#step_fn = step_fn.compile()
 
 visualizer = Visualizer(viz_gpu_state, renderer.madrona)
 visualizer.loop(renderer.madrona, step_fn, mjx_wrapper)
