@@ -95,19 +95,39 @@ Sim::Sim(Engine &ctx,
             scale.d0 = plane_scale;
             scale.d1 = plane_scale;
             scale.d2 = plane_scale;
-            render_obj_idx = 0;
+            render_obj_idx = (int32_t)RenderPrimObjectIDs::Plane;
         } break;
         case MJXGeomType::Sphere: {
             float sphere_scale = cfg.geomSizes[geom_idx].x;
             scale.d0 = sphere_scale;
             scale.d1 = sphere_scale;
             scale.d2 = sphere_scale;
-            render_obj_idx = 1;
+            render_obj_idx = (int32_t)RenderPrimObjectIDs::Sphere;
+        } break;
+        case MJXGeomType::Capsule: {
+            Vector3 geom_size = cfg.geomSizes[geom_idx];
+            scale.d0 = geom_size.x;
+            scale.d1 = geom_size.y;
+            scale.d2 = geom_size.z;
+            render_obj_idx = (int32_t)RenderPrimObjectIDs::Sphere;
+        } break;
+        case MJXGeomType::Box: {
+            Vector3 geom_size = cfg.geomSizes[geom_idx];
+            scale.d0 = geom_size.x;
+            scale.d1 = geom_size.y;
+            scale.d2 = geom_size.z;
+            render_obj_idx = (int32_t)RenderPrimObjectIDs::Sphere;
         } break;
         case MJXGeomType::Mesh: {
             scale = Diag3x3 { 1, 1, 1 };
-            render_obj_idx = 2 + cfg.geomDataIDs[geom_idx];
+            render_obj_idx = (int32_t)RenderPrimObjectIDs::NumPrims +
+                cfg.geomDataIDs[geom_idx];
         } break;
+        case MJXGeomType::Heightfield:
+        case MJXGeomType::Ellipsoid:
+        case MJXGeomType::Cylinder:
+            assert(false);
+            break;
         default: {
             assert(false);
         } break;

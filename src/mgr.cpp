@@ -399,10 +399,11 @@ static void loadRenderObjects(
 {
     using namespace imp;
 
-    std::array<std::string, 2> render_asset_paths;
-    render_asset_paths[0] =
+    std::array<std::string, (size_t)RenderPrimObjectIDs::NumPrims> 
+        render_asset_paths;
+    render_asset_paths[(size_t)RenderPrimObjectIDs::Plane] =
         (std::filesystem::path(DATA_DIR) / "plane.obj").string();
-    render_asset_paths[1] =
+    render_asset_paths[(size_t)RenderPrimObjectIDs::Sphere] =
         (std::filesystem::path(DATA_DIR) / "sphere.obj").string();
 
     std::array<const char *, render_asset_paths.size()> render_asset_cstrs;
