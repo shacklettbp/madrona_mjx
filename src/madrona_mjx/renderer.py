@@ -146,6 +146,7 @@ class BatchRenderer(flax.struct.PyTreeNode):
     return self.replace(render_token=render_token), rgb, depth
 
 
+
 def _setup_jax_primitives(renderer, num_worlds, num_geoms, num_cams,
                           render_width, render_height):
   custom_call_platform = 'gpu'
@@ -162,7 +163,7 @@ def _setup_jax_primitives(renderer, num_worlds, num_geoms, num_cams,
       jax.ShapeDtypeStruct(shape=(num_worlds, num_cams, 4),
                            dtype=jnp.float32),
   ]
-        
+
   renderer_outputs = [
       jax.ShapeDtypeStruct(
           shape=(num_worlds, num_cams, render_height, render_width, 4),
@@ -189,21 +190,21 @@ def _setup_jax_primitives(renderer, num_worlds, num_geoms, num_cams,
 
   def _row_major_layout(shape):
     return tuple(range(len(shape) -1, -1, -1))
-  
+
   def _shape_dtype_to_abstract_vals(vs):
     return tuple(ShapedArray(v.shape, v.dtype) for v in vs)
-  
+
   def _lower_shape_dtypes(shape_dtypes):
     return [ir.RankedTensorType.get(i.shape, dtype_to_ir_type(i.dtype))
         for i in shape_dtypes]
-  
+
   def _init_lowering(ctx, *inputs):
     input_types = [ir.RankedTensorType(i.type) for i in inputs]
     input_layouts = [_row_major_layout(t.shape) for t in input_types]
-  
+
     result_types = _lower_shape_dtypes(renderer_outputs)
     result_layouts = [_row_major_layout(t.shape) for t in result_types]
-  
+
     results = custom_call(
         init_custom_call_name,
         backend_config=renderer_encode,
@@ -213,19 +214,19 @@ def _setup_jax_primitives(renderer, num_worlds, num_geoms, num_cams,
         result_layouts=result_layouts,
         has_side_effect=True,
     ).results
-  
+
     return results
-  
+
   def _init_abstract(*inputs):
     return _shape_dtype_to_abstract_vals(renderer_outputs)
-  
+
   def _render_lowering(ctx, *inputs):
     input_types = [ir.RankedTensorType(i.type) for i in inputs]
     input_layouts = [_row_major_layout(t.shape) for t in input_types]
-  
+
     result_types = _lower_shape_dtypes(renderer_outputs)
     result_layouts = [_row_major_layout(t.shape) for t in result_types]
-  
+
     results = custom_call(
         render_custom_call_name,
         backend_config=renderer_encode,
@@ -235,29 +236,43 @@ def _setup_jax_primitives(renderer, num_worlds, num_geoms, num_cams,
         result_layouts=result_layouts,
         has_side_effect=True,
     ).results
-  
+
     return results
-  
+
   def _render_abstract(*inputs):
     return _shape_dtype_to_abstract_vals(renderer_outputs)
-  
-  
+
   _init_primitive = core.Primitive(init_custom_call_name)
   _init_primitive.multiple_results = True
-  _init_primitive.def_impl(partial(xla.apply_primitive, _init_primitive))
+  _init_primitive_impl = partial(xla.apply_primitive, _init_primitive)
+  _init_primitive.def_impl(_init_primitive_impl)
   _init_primitive.def_abstract_eval(_init_abstract)
-  
+
   mlir.register_lowering(
       _init_primitive,
       _init_lowering,
       platform=custom_call_platform,
   )
-  
+
   _render_primitive = core.Primitive(render_custom_call_name)
   _render_primitive.multiple_results = True
-  _render_primitive.def_impl(partial(xla.apply_primitive, _render_primitive))
+  _render_primitive_impl = partial(xla.apply_primitive, _render_primitive)
+  _render_primitive.def_impl(_render_primitive_impl)
   _render_primitive.def_abstract_eval(_render_abstract)
-  
+
+  def _init_prim_batch(vector_arg_values, batch_axes):
+    assert all(b == batch_axes[1] for b in batch_axes[1:])
+    result_axes = [batch_axes[1], batch_axes[1], batch_axes[0]]
+    return _init_primitive_impl(*vector_arg_values), result_axes
+
+  def _render_prim_batch(vector_arg_values, batch_axes):
+    assert all(b == batch_axes[1] for b in batch_axes[1:])
+    result_axes = [batch_axes[1], batch_axes[1], batch_axes[0]]
+    return _render_primitive_impl(*vector_arg_values), result_axes
+
+  batching.primitive_batchers[_init_primitive] = _init_prim_batch
+  batching.primitive_batchers[_render_primitive] = _render_prim_batch
+
   mlir.register_lowering(
       _render_primitive,
       _render_lowering,
@@ -273,3 +288,4 @@ def _setup_jax_primitives(renderer, num_worlds, num_geoms, num_cams,
       return _render_primitive.bind(*args)
 
   return init_fn, render_fn
+
