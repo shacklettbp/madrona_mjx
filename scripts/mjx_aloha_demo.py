@@ -1,4 +1,4 @@
-"""Aloha demo with madrona batch rendering.
+r"""Aloha demo with madrona batch rendering.
 
 This demo requires a patch to the Aloha files:
 
@@ -107,6 +107,54 @@ xla_flags += ' --xla_gpu_triton_gemm_any=True'
 os.environ['XLA_FLAGS'] = xla_flags
 
 
+def mat_to_quat(mat):
+  """Converts 3D rotation matrix to quaternion."""
+  # this is a hack to avoid reimplementing logic in mjx.camlight for quats
+  mat = mat.flatten()
+
+  q0 = 0.5 * jp.sqrt(1 + mat[0] + mat[4] + mat[8])
+  quat0 = jp.array([
+      q0,
+      0.25 * (mat[7] - mat[5]) / q0,
+      0.25 * (mat[2] - mat[6]) / q0,
+      0.25 * (mat[3] - mat[1]) / q0
+  ])
+
+  q1 = 0.5 * jp.sqrt(1 + mat[0] - mat[4] - mat[8]) 
+  quat1 = jp.array([
+      q1,
+      0.25 * (mat[7] - mat[5]) / q1,
+      0.25 * (mat[1] + mat[3]) / q1,
+      0.25 * (mat[2] + mat[6]) / q1,
+  ])
+
+  q2 = 0.5 * jp.sqrt(1 - mat[0] + mat[4] - mat[8])
+  quat2 = jp.array([
+      q2,
+      0.25 * (mat[2] - mat[6]) / q2,
+      0.25 * (mat[1] + mat[3]) / q2,
+      0.25 * (mat[5] + mat[7]) / q2,
+  ])
+
+  q3 = 0.5 * jp.sqrt(1 - mat[0] - mat[4] + mat[8])
+  quat3 = jp.array([
+      q3,
+      0.25 * (mat[3] - mat[1]) / q3,
+      0.25 * (mat[2] + mat[6]) / q3,
+      0.25 * (mat[5] + mat[7]) / q3,
+  ])
+
+  quat0_cond = (mat[0] + mat[4] + mat[8]) > 0
+  quat1_cond = (mat[0] > mat[4]) & (mat[0] > mat[8])
+  quat2_cond = mat[4] > mat[8]
+
+  quat = jp.where(quat0_cond, quat0, quat3)
+  quat = jp.where(~quat0_cond & quat1_cond, quat1, quat)
+  quat = jp.where(~quat0_cond & ~quat1_cond & quat2_cond, quat2, quat)
+
+  return math.normalize(quat)
+
+
 class Renderer:
   """Wraps MJX Model around MadronaBatchRenderer."""
 
@@ -155,7 +203,7 @@ class Renderer:
     self.init_prim_fn = init_fn
     self.render_prim_fn = render_fn
 
-  def get_quats(self, state):
+  def get_geom_quat(self, state):
     to_global = jax.vmap(math.quat_mul)
     geom_quat = to_global(
       state.xquat[self.m.geom_bodyid],
@@ -164,11 +212,11 @@ class Renderer:
     return geom_quat
 
   def init(self, state):
-    geom_quat = self.get_quats(state)
-
-    render_token = jnp.array((), jnp.bool)
-
+    geom_quat = self.get_geom_quat(state)
     cam_quat = jax.vmap(mat_to_quat)(state.cam_xmat)
+
+    render_token = jp.array((), jp.bool)
+
     init_rgb, init_depth, render_token = self.init_prim_fn(
         render_token,
         state.geom_xpos,
@@ -179,9 +227,10 @@ class Renderer:
     return render_token, init_rgb, init_depth
 
   def render(self, render_token, state):
-    geom_quat, cam_quat = self.get_quats(state)
+    geom_quat = self.get_geom_quat(state)
+    cam_quat = jax.vmap(mat_to_quat)(state.cam_xmat)
 
-    render_token = jnp.array((), jnp.bool)
+    render_token = jp.array((), jp.bool)
 
     rgb, depth, render_token = self.render_prim_fn(render_token,
                           state.geom_xpos,
@@ -392,12 +441,13 @@ if __name__ == '__main__':
     state = jit_env_step(state, ctrl)
 
   # render a video for a single env/camera
-  rgbs = np.array([r.info['rgb'][0, 0, ..., :3] for r in rollout])
-  media.write_video('madrona.mp4', rgbs / 255., fps=1.0 / env.dt)
+  for i in range(env.sys.ncam):
+    rgbs = np.array([r.info['rgb'][0, i, ..., :3] for r in rollout])
+    media.write_video(f'madrona_{i}.mp4', rgbs / 255., fps=1.0 / env.dt)
 
   # TODO write mujoco renderer video
 
-  if arg.benchmark:
+  if args.benchmark:
     jit_time, run_time, steps = benchmark(
         env,
         args.num_steps,
