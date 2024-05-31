@@ -74,10 +74,12 @@ from brax import base
 from brax.envs.base import PipelineEnv
 from brax.envs.base import State
 from brax.io import html
+from brax.io import image
 from brax.io import mjcf
 from brax.training.agents.ppo import train as ppo
 from mujoco.mjx._src import math
 from mujoco.mjx._src import io
+from mujoco.mjx._src import support
 
 from madrona_mjx.renderer import _setup_jax_primitives
 from madrona_mjx._madrona_mjx_batch_renderer import MadronaBatchRenderer
@@ -91,6 +93,7 @@ arg_parser.add_argument('--num-steps', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-width', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-height', type=int, required=True)
 arg_parser.add_argument('--benchmark', type=bool, required=False, default=False)
+arg_parser.add_argument('--render-mj', type=bool, required=False, default=False)
 
 args = arg_parser.parse_args()
 
@@ -443,9 +446,14 @@ if __name__ == '__main__':
   # render a video for a single env/camera
   for i in range(env.sys.ncam):
     rgbs = np.array([r.info['rgb'][0, i, ..., :3] for r in rollout])
-    media.write_video(f'madrona_{i}.mp4', rgbs / 255., fps=1.0 / env.dt)
+    media.write_video(f'video_madrona_{i}.mp4', rgbs / 255., fps=1.0 / env.dt)
 
-  # TODO write mujoco renderer video
+    if args.render_mj:
+      camera_name = support.id2name(env.sys.mj_model, mujoco.mjtObj.mjOBJ_CAMERA, i)
+      states = [jax.tree_util.tree_map(lambda x: jp.take(x, 0, axis=0), r.pipeline_state)
+                for r in rollout]
+      rgbs = image.render_array(env.sys, states, 128, 128, camera_name)
+      media.write_video(f'video_mujoco_{i}.mp4', rgbs, fps=1.0 / env.dt)
 
   if args.benchmark:
     jit_time, run_time, steps = benchmark(
