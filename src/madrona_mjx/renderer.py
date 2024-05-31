@@ -6,7 +6,6 @@ from functools import partial
 
 import jax
 from jax import random, numpy as jnp
-import flax
 
 import numpy as np
 from jax import core, dtypes
@@ -20,37 +19,28 @@ from jaxlib.hlo_helpers import custom_call
 from madrona_mjx._madrona_mjx_batch_renderer import MadronaBatchRenderer
 from madrona_mjx._madrona_mjx_batch_renderer.madrona import ExecMode
 
-class BatchRenderer(flax.struct.PyTreeNode):
-  madrona: MadronaBatchRenderer = flax.struct.field(pytree_node=False)
-  render_impl_fn: Callable = flax.struct.field(pytree_node=False)
-  render_token: jax.Array
-
-  @staticmethod
-  def create(
-      mjx_env,
-      init_mjx_state,
+class BatchRenderer:
+  def __init__(
+      self,
+      mjx_sys, 
       gpu_id,
       num_worlds,
       batch_render_view_width,
       batch_render_view_height,
-      cpu_madrona,
       viz_gpu_hdls=None,
   ):
+    mesh_verts = mjx_sys.mesh_vert
+    mesh_faces = mjx_sys.mesh_face
+    mesh_vert_offsets = mjx_sys.mesh_vertadr
+    mesh_face_offsets = mjx_sys.mesh_faceadr
+    geom_types = mjx_sys.geom_type
+    geom_data_ids = mjx_sys.geom_dataid
+    geom_sizes = jax.device_get(mjx_sys.geom_size)
+    num_cams = mjx_sys.ncam
+
     # Initialize madrona simulator
-
-    m = mjx_env.sys
-
-    mesh_verts = m.mesh_vert
-    mesh_faces = m.mesh_face
-    mesh_vert_offsets = m.mesh_vertadr
-    mesh_face_offsets = m.mesh_faceadr
-    geom_types = m.geom_type
-    geom_data_ids = m.geom_dataid
-    geom_sizes = jax.device_get(m.geom_size)
-    num_cams = m.ncam
-
-    madrona = MadronaBatchRenderer(
-        exec_mode = ExecMode.CPU if cpu_madrona else ExecMode.CUDA,
+    self.madrona = MadronaBatchRenderer(
+        exec_mode = ExecMode.CUDA,
         gpu_id = gpu_id,
         mesh_vertices = mesh_verts,
         mesh_faces = mesh_faces,
@@ -67,7 +57,7 @@ class BatchRenderer(flax.struct.PyTreeNode):
     )
 
     init_prim_fn, render_prim_fn = _setup_jax_primitives(
-        madrona, num_worlds, geom_sizes.shape[0], num_cams,
+        self.madrona, num_worlds, geom_sizes.shape[0], num_cams,
         batch_render_view_width, batch_render_view_height)
 
     @jax.vmap
@@ -106,44 +96,43 @@ class BatchRenderer(flax.struct.PyTreeNode):
       return compute_geom_quats(state, m), compute_cam_quats(state, m)
 
     @jax.jit
-    def render_init(mjx_state):
+    def render_init(pipeline_state):
       geom_quat, cam_quat = jax.jit(compute_transforms)(
-          mjx_state.pipeline_state)
+          pipeline_state)
        
       render_token = jnp.array((), jnp.bool)
 
       init_rgb, init_depth, render_token = init_prim_fn(
           render_token,
-          mjx_state.pipeline_state.geom_xpos,
+          pipeline_state.geom_xpos,
           geom_quat,
-          mjx_state.pipeline_state.cam_xpos,
+          pipeline_state.cam_xpos,
           cam_quat)
 
-      return render_token
+      return render_token, init_rgb, init_depth
 
     @jax.jit
     def render_fn(render_token, mjx_state):
-      geom_quat, cam_quat = compute_transforms(mjx_state.pipeline_state)
+      geom_quat, cam_quat = compute_transforms(pipeline_state)
 
       return render_prim_fn(render_token,
-                            mjx_state.pipeline_state.geom_xpos,
+                            pipeline_state.geom_xpos,
                             geom_quat,
-                            mjx_state.pipeline_state.cam_xpos,
+                            pipeline_state.cam_xpos,
                             cam_quat)
 
-    render_token = render_init(init_mjx_state)
-    
-    return BatchRenderer(
-        madrona=madrona,
-        render_impl_fn=render_fn,
-        render_token=render_token,
-    )
+    self.init_fn = render_init
+    self.render_fn = render_fn
 
-  def render(self, mjx_state):
-    render_token = self.render_token
-    rgb, depth, render_token = self.render_impl_fn(render_token, mjx_state)
+  def init(self, pipeline_state):
+    rgb, depth, render_token = self.init_fn(pipeline_state)
 
-    return self.replace(render_token=render_token), rgb, depth
+    return render_token, rgb, depth
+
+  def render(self, render_token, mjx_state):
+    rgb, depth, render_token = self.render_fn(render_token, pipeline_state)
+
+    return render_token, rgb, depth
 
 
 
