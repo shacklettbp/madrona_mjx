@@ -1,11 +1,10 @@
-import math
 import sys
 from typing import Optional, Any, List, Sequence, Dict, Tuple, Union, Callable
 import os
 from functools import partial
 
 import jax
-from jax import random, numpy as jnp
+from jax import random, numpy as jp
 
 import numpy as np
 from jax import core, dtypes
@@ -20,26 +19,81 @@ from jaxlib.hlo_helpers import custom_call
 from madrona_mjx._madrona_mjx_batch_renderer import MadronaBatchRenderer
 from madrona_mjx._madrona_mjx_batch_renderer.madrona import ExecMode
 
+from mujoco.mjx._src import math
+from mujoco.mjx._src import io
+from mujoco.mjx._src import support
+
+def mat_to_quat(mat):
+  """Converts 3D rotation matrix to quaternion."""
+  # this is a hack to avoid reimplementing logic in mjx.camlight for quats
+  mat = mat.flatten()
+
+  q0 = 0.5 * jp.sqrt(1 + mat[0] + mat[4] + mat[8])
+  quat0 = jp.array([
+      q0,
+      0.25 * (mat[7] - mat[5]) / q0,
+      0.25 * (mat[2] - mat[6]) / q0,
+      0.25 * (mat[3] - mat[1]) / q0
+  ])
+
+  q1 = 0.5 * jp.sqrt(1 + mat[0] - mat[4] - mat[8]) 
+  quat1 = jp.array([
+      q1,
+      0.25 * (mat[7] - mat[5]) / q1,
+      0.25 * (mat[1] + mat[3]) / q1,
+      0.25 * (mat[2] + mat[6]) / q1,
+  ])
+
+  q2 = 0.5 * jp.sqrt(1 - mat[0] + mat[4] - mat[8])
+  quat2 = jp.array([
+      q2,
+      0.25 * (mat[2] - mat[6]) / q2,
+      0.25 * (mat[1] + mat[3]) / q2,
+      0.25 * (mat[5] + mat[7]) / q2,
+  ])
+
+  q3 = 0.5 * jp.sqrt(1 - mat[0] - mat[4] + mat[8])
+  quat3 = jp.array([
+      q3,
+      0.25 * (mat[3] - mat[1]) / q3,
+      0.25 * (mat[2] + mat[6]) / q3,
+      0.25 * (mat[5] + mat[7]) / q3,
+  ])
+
+  quat0_cond = (mat[0] + mat[4] + mat[8]) > 0
+  quat1_cond = (mat[0] > mat[4]) & (mat[0] > mat[8])
+  quat2_cond = mat[4] > mat[8]
+
+  quat = jp.where(quat0_cond, quat0, quat3)
+  quat = jp.where(~quat0_cond & quat1_cond, quat1, quat)
+  quat = jp.where(~quat0_cond & ~quat1_cond & quat2_cond, quat2, quat)
+
+  return math.normalize(quat)
+
+
 class BatchRenderer:
+  """Wraps MJX Model around MadronaBatchRenderer."""
+
   def __init__(
       self,
-      mjx_sys, 
+      m,
       gpu_id,
       num_worlds,
       batch_render_view_width,
       batch_render_view_height,
-      viz_gpu_hdls=None,
+      viz_gpu_hdls=None
   ):
-    mesh_verts = mjx_sys.mesh_vert
-    mesh_faces = mjx_sys.mesh_face
-    mesh_vert_offsets = mjx_sys.mesh_vertadr
-    mesh_face_offsets = mjx_sys.mesh_faceadr
-    geom_types = mjx_sys.geom_type
-    geom_data_ids = mjx_sys.geom_dataid
-    geom_sizes = jax.device_get(mjx_sys.geom_size)
-    num_cams = mjx_sys.ncam
+    mesh_verts = m.mesh_vert
+    mesh_faces = m.mesh_face
+    mesh_vert_offsets = m.mesh_vertadr
+    mesh_face_offsets = m.mesh_faceadr
+    geom_types = m.geom_type
+    # TODO: filter geom groups
+    geom_data_ids = m.geom_dataid
+    geom_sizes = jax.device_get(m.geom_size)
+    # TODO: filter for camera ids
+    num_cams = m.ncam
 
-    # Initialize madrona simulator
     self.madrona = MadronaBatchRenderer(
         exec_mode = ExecMode.CUDA,
         gpu_id = gpu_id,
@@ -57,81 +111,48 @@ class BatchRenderer:
         visualizer_gpu_handles = viz_gpu_hdls,
     )
 
-    init_prim_fn, render_prim_fn = _setup_jax_primitives(
+    init_fn, render_fn = _setup_jax_primitives(
         self.madrona, num_worlds, geom_sizes.shape[0], num_cams,
         batch_render_view_width, batch_render_view_height)
 
-    @jax.vmap
-    def mult_quat(u, v):
-      return jnp.array([
-          u[0] * v[0] - u[1] * v[1] - u[2] * v[2] - u[3] * v[3],
-          u[0] * v[1] + u[1] * v[0] + u[2] * v[3] - u[3] * v[2],
-          u[0] * v[2] - u[1] * v[3] + u[2] * v[0] + u[3] * v[1],
-          u[0] * v[3] + u[1] * v[2] - u[2] * v[1] + u[3] * v[0],
-      ])
+    self.m = m
+    self.init_prim_fn = init_fn
+    self.render_prim_fn = render_fn
 
-    def normalize_quat(q):
-      n = jnp.linalg.norm(q, ord=2, axis=-1, keepdims=True)
-      return q / (n + 1e-6 * (n == 0.0))
+  def get_geom_quat(self, state):
+    to_global = jax.vmap(math.quat_mul)
+    geom_quat = to_global(
+      state.xquat[self.m.geom_bodyid],
+      self.m.geom_quat
+    )
+    return geom_quat
 
-    # MJX computes this internally but unfortunately transforms the result to
-    # a matrix, Madrona needs a quaternion
-    def compute_geom_quats(state, m):
-      xquat = state.xquat
+  def init(self, state):
+    geom_quat = self.get_geom_quat(state)
+    cam_quat = jax.vmap(mat_to_quat)(state.cam_xmat)
 
-      world_quat = state.xquat[m.geom_bodyid]
-      local_quat = m.geom_quat
+    render_token = jp.array((), jp.bool)
 
-      return normalize_quat(mult_quat(world_quat, local_quat))
+    init_rgb, init_depth, render_token = self.init_prim_fn(
+        render_token,
+        state.geom_xpos,
+        geom_quat,
+        state.cam_xpos,
+        cam_quat)
 
-    def compute_cam_quats(state, m):
-      xquat = state.xquat
+    return render_token, init_rgb, init_depth
 
-      world_quat = state.xquat[m.cam_bodyid]
-      local_quat = m.cam_quat
+  def render(self, render_token, state):
+    geom_quat = self.get_geom_quat(state)
+    cam_quat = jax.vmap(mat_to_quat)(state.cam_xmat)
 
-      return normalize_quat(mult_quat(world_quat, local_quat))
+    render_token = jp.array((), jp.bool)
 
-    @jax.vmap
-    def compute_transforms(state):
-      return compute_geom_quats(state, m), compute_cam_quats(state, m)
-
-    @jax.jit
-    def render_init(pipeline_state):
-      geom_quat, cam_quat = jax.jit(compute_transforms)(
-          pipeline_state)
-       
-      render_token = jnp.array((), jnp.bool)
-
-      init_rgb, init_depth, render_token = init_prim_fn(
-          render_token,
-          pipeline_state.geom_xpos,
-          geom_quat,
-          pipeline_state.cam_xpos,
-          cam_quat)
-
-      return render_token, init_rgb, init_depth
-
-    @jax.jit
-    def render_fn(render_token, mjx_state):
-      geom_quat, cam_quat = compute_transforms(pipeline_state)
-
-      return render_prim_fn(render_token,
-                            pipeline_state.geom_xpos,
-                            geom_quat,
-                            pipeline_state.cam_xpos,
-                            cam_quat)
-
-    self.init_fn = render_init
-    self.render_fn = render_fn
-
-  def init(self, pipeline_state):
-    rgb, depth, render_token = self.init_fn(pipeline_state)
-
-    return render_token, rgb, depth
-
-  def render(self, render_token, mjx_state):
-    rgb, depth, render_token = self.render_fn(render_token, pipeline_state)
+    rgb, depth, render_token = self.render_prim_fn(render_token,
+                          state.geom_xpos,
+                          geom_quat,
+                          state.cam_xpos,
+                          cam_quat)
 
     return render_token, rgb, depth
 
@@ -143,27 +164,27 @@ def _setup_jax_primitives(renderer, num_worlds, num_geoms, num_cams,
   renderer_encode, init_custom_call_capsule, render_custom_call_capsule = renderer.xla_entries()
 
   renderer_inputs = [
-      jax.ShapeDtypeStruct(shape=(), dtype=jnp.bool),
+      jax.ShapeDtypeStruct(shape=(), dtype=jp.bool),
       jax.ShapeDtypeStruct(shape=(num_worlds, num_geoms, 3),
-                           dtype=jnp.float32),
+                           dtype=jp.float32),
       jax.ShapeDtypeStruct(shape=(num_worlds, num_geoms, 4),
-                           dtype=jnp.float32),
+                           dtype=jp.float32),
       jax.ShapeDtypeStruct(shape=(num_worlds, num_cams, 3),
-                           dtype=jnp.float32),
+                           dtype=jp.float32),
       jax.ShapeDtypeStruct(shape=(num_worlds, num_cams, 4),
-                           dtype=jnp.float32),
+                           dtype=jp.float32),
   ]
 
   renderer_outputs = [
       jax.ShapeDtypeStruct(
           shape=(num_worlds, num_cams, render_height, render_width, 4),
-          dtype=jnp.uint8,
+          dtype=jp.uint8,
       ),
       jax.ShapeDtypeStruct(
           shape=(num_worlds, num_cams, render_height, render_width, 1),
-          dtype=jnp.float32,
+          dtype=jp.float32,
       ),
-      jax.ShapeDtypeStruct(shape=(), dtype=jnp.bool),
+      jax.ShapeDtypeStruct(shape=(), dtype=jp.bool),
   ]
 
   custom_call_prefix = f"{type(renderer).__name__}_{id(renderer)}"

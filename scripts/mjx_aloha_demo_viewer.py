@@ -55,12 +55,10 @@ from typing import Optional, Any, List, Sequence, Dict, Tuple, Union, Callable
 import jax
 import jax.numpy as jp
 import flax
-import mujoco
 import numpy as np
 
 import mediapy as media
 
-from brax import base
 from brax.io import html
 from brax.io import image
 from brax.training.agents.ppo import train as ppo
@@ -70,17 +68,21 @@ from mujoco.mjx._src import support
 
 from aloha_env import AlohaBringToTarget
 
+from madrona_mjx.viz import VisualizerGPUState, Visualizer
+
+
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('--gpu-id', type=int, default=0)
 arg_parser.add_argument('--num-worlds', type=int, required=True)
-arg_parser.add_argument('--num-steps', type=int, required=True)
+arg_parser.add_argument('--window-width', type=int, required=True)
+arg_parser.add_argument('--window-height', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-width', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-height', type=int, required=True)
 arg_parser.add_argument('--benchmark', type=bool, required=False, default=False)
-arg_parser.add_argument('--render-mj', type=bool, required=False, default=False)
 
 args = arg_parser.parse_args()
 
+viz_gpu_state = VisualizerGPUState(args.window_width, args.window_height, args.gpu_id)
 
 # FIXME, hacky, but need to leave decent chunk of memory for Madrona /
 # the batch renderer
@@ -141,7 +143,8 @@ if __name__ == '__main__':
       render_batch_size=args.num_worlds,
       gpu_id=args.gpu_id,
       width=args.batch_render_view_width,
-      height=args.batch_render_view_height
+      height=args.batch_render_view_height,
+      render_viz_gpu_hdls=viz_gpu_state.get_gpu_handles(),
   )
   jit_env_reset = jax.jit(jax.vmap(env.reset))
   jit_env_step = jax.jit(jax.vmap(env.step))
@@ -151,37 +154,15 @@ if __name__ == '__main__':
   rng = jax.random.PRNGKey(seed=2)
   rng, *key = jax.random.split(rng, args.num_worlds + 1)
   state = jit_env_reset(rng=jp.array(key))
-  for i in range(args.num_steps):
+
+  def step_fn(carry):
+    rng, state = carry
+
     act_rng, rng = jax.random.split(rng)
-    rollout.append(state)
     ctrl = jax.random.uniform(act_rng, (args.num_worlds, env.sys.nu))
     state = jit_env_step(state, ctrl)
 
-  # render a video for a single env/camera
-  for i in range(env.sys.ncam):
-    rgbs = np.array([r.info['rgb'][0, i, ..., :3] for r in rollout])
-    media.write_video(f'video_madrona_{i}.mp4', rgbs / 255., fps=1.0 / env.dt)
-
-    if args.render_mj:
-      camera_name = support.id2name(env.sys.mj_model, mujoco.mjtObj.mjOBJ_CAMERA, i)
-      states = [jax.tree_util.tree_map(lambda x: jp.take(x, 0, axis=0), r.pipeline_state)
-                for r in rollout]
-      rgbs = image.render_array(env.sys, states, 128, 128, camera_name)
-      media.write_video(f'video_mujoco_{i}.mp4', rgbs, fps=1.0 / env.dt)
-
-  if args.benchmark:
-    jit_time, run_time, steps = benchmark(
-        env,
-        args.num_steps,
-        args.num_worlds,
-    )
-
-    print(f"""
-Summary for {args.num_worlds} parallel rollouts
-
- Total JIT time: {jit_time:.2f} s
- Total simulation time: {run_time:.2f} s
- Total steps per second: { steps / run_time:.0f}
- Total realtime factor: { steps * env.sys.opt.timestep / run_time:.2f} x
- Total time per step: { 1e6 * run_time / steps:.2f} µs""")
-
+    return rng, state
+    
+  visualizer = Visualizer(viz_gpu_state, env.renderer.madrona)
+  visualizer.loop(env.renderer.madrona, step_fn, (rng, state))
