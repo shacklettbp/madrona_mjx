@@ -24,6 +24,7 @@ enum class RenderPrimObjectIDs : uint32_t {
     DebugCam = 0,
     Plane = 1,
     Sphere = 2,
+    Box = 3,
     NumPrims,
 };
 

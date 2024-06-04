@@ -134,6 +134,7 @@ Sim::Sim(Engine &ctx,
             scale.d0 = plane_scale;
             scale.d1 = plane_scale;
             scale.d2 = plane_scale;
+            scale = { 0, 0, 0 }; // Hack
             render_obj_idx = (int32_t)RenderPrimObjectIDs::Plane;
         } break;
         case MJXGeomType::Sphere: {
@@ -141,6 +142,7 @@ Sim::Sim(Engine &ctx,
             scale.d0 = sphere_scale;
             scale.d1 = sphere_scale;
             scale.d2 = sphere_scale;
+            scale = { 0, 0, 0 }; // Hack
             render_obj_idx = (int32_t)RenderPrimObjectIDs::Sphere;
         } break;
         case MJXGeomType::Capsule: {
@@ -148,6 +150,7 @@ Sim::Sim(Engine &ctx,
             scale.d0 = geom_size.x;
             scale.d1 = geom_size.y;
             scale.d2 = geom_size.z;
+            scale = { 0, 0, 0 }; // Hack
             render_obj_idx = (int32_t)RenderPrimObjectIDs::Sphere;
         } break;
         case MJXGeomType::Box: {
@@ -155,7 +158,7 @@ Sim::Sim(Engine &ctx,
             scale.d0 = geom_size.x;
             scale.d1 = geom_size.y;
             scale.d2 = geom_size.z;
-            render_obj_idx = (int32_t)RenderPrimObjectIDs::Sphere;
+            render_obj_idx = (int32_t)RenderPrimObjectIDs::Box;
         } break;
         case MJXGeomType::Mesh: {
             scale = Diag3x3 { 1, 1, 1 };

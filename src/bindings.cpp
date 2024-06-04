@@ -35,7 +35,7 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
                 nb::device::cpu> geom_types,
             nb::ndarray<const int32_t, nb::shape<-1>,
                 nb::device::cpu> geom_data_ids,
-            nb::ndarray<const int32_t, nb::shape<-1, 3>,
+            nb::ndarray<const float, nb::shape<-1, 3>,
                 nb::device::cpu> geom_sizes,
             int64_t num_cams,
             int64_t num_worlds,

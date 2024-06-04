@@ -412,6 +412,8 @@ static void loadRenderObjects(
         (std::filesystem::path(DATA_DIR) / "plane.obj").string();
     render_asset_paths[(size_t)RenderPrimObjectIDs::Sphere] =
         (std::filesystem::path(DATA_DIR) / "sphere.obj").string();
+    render_asset_paths[(size_t)RenderPrimObjectIDs::Box] =
+        (std::filesystem::path(DATA_DIR) / "box.obj").string();
 
     std::array<const char *, render_asset_paths.size()> render_asset_cstrs;
     for (size_t i = 0; i < render_asset_paths.size(); i++) {
