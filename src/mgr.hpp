@@ -52,6 +52,7 @@ public:
         uint32_t numWorlds; // Simulation batch size
         uint32_t batchRenderViewWidth;
         uint32_t batchRenderViewHeight;
+        bool addCamDebugGeometry = false;
     };
 
     MGR_EXPORT Manager(

@@ -18,22 +18,52 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     RenderingSystem::registerTypes(registry, cfg.renderBridge);
 
     registry.registerArchetype<RenderEntity>();
-    registry.registerArchetype<CameraEntity>();
 
     registry.exportColumn<RenderEntity, Position>(
         (uint32_t)ExportID::InstancePositions);
     registry.exportColumn<RenderEntity, Rotation>(
         (uint32_t)ExportID::InstanceRotations);
 
-    registry.exportColumn<CameraEntity, Position>(
-        (uint32_t)ExportID::CameraPositions);
-    registry.exportColumn<CameraEntity, Rotation>(
-        (uint32_t)ExportID::CameraRotations);
+    
+    if (cfg.useDebugCamEntity) {
+        registry.registerArchetype<DebugCameraEntity>();
+
+        registry.exportColumn<DebugCameraEntity, Position>(
+            (uint32_t)ExportID::CameraPositions);
+        registry.exportColumn<DebugCameraEntity, Rotation>(
+            (uint32_t)ExportID::CameraRotations);
+    } else {
+        registry.registerArchetype<CameraEntity>();
+
+        registry.exportColumn<CameraEntity, Position>(
+            (uint32_t)ExportID::CameraPositions);
+        registry.exportColumn<CameraEntity, Rotation>(
+            (uint32_t)ExportID::CameraRotations);
+    }
 }
+
+#if 0
+inline void printTransforms(Engine &ctx,
+                            Position &pos,
+                            Rotation &rot,
+                            Scale &scale,
+                            ObjectID &obj_id)
+{
+    printf("(%f %f %f) (%f %f %f %f) (%f %f %f) %d\n",
+        pos.x, pos.y, pos.z,
+        rot.w, rot.x, rot.y, rot.z,
+        scale.d0, scale.d1, scale.d2,
+        obj_id.idx);
+}
+#endif
 
 static void setupRenderTasks(TaskGraphBuilder &builder,
                              Span<const TaskGraphNodeID> deps)
 {
+#if 0
+    builder.addToGraph<ParallelForNode<
+        Engine, printTransforms, Position, Rotation, Scale, ObjectID>>(deps);
+#endif
     RenderingSystem::setupTasks(builder, deps);
 }
 
@@ -51,23 +81,32 @@ TaskGraph::NodeID queueSortByWorld(TaskGraph::Builder &builder,
 }
 #endif
 
-static void setupInitTasks(TaskGraphBuilder &builder)
+static void setupInitTasks(TaskGraphBuilder &builder,
+                           const Sim::Config &cfg)
 {
 #ifdef MADRONA_GPU_MODE
-    auto sort_sys = queueSortByWorld<CameraEntity>(builder, {});
+    TaskGraphNodeID sort_sys;
+
+    if (cfg.useDebugCamEntity) {
+        sort_sys = queueSortByWorld<DebugCameraEntity>(builder, {});
+    } else {
+        sort_sys = queueSortByWorld<CameraEntity>(builder, {});
+    }
+
     sort_sys = queueSortByWorld<RenderEntity>(builder, {sort_sys});
 
     setupRenderTasks(builder, {sort_sys});
 #else
+    (void)cfg;
     setupRenderTasks(builder, {});
 #endif
 }
 
 // Build the task graph
-void Sim::setupTasks(TaskGraphManager &taskgraph_mgr, const Config &)
+void Sim::setupTasks(TaskGraphManager &taskgraph_mgr, const Config &cfg)
 {
     TaskGraphBuilder &init_builder = taskgraph_mgr.init(TaskGraphID::Init);
-    setupInitTasks(init_builder);
+    setupInitTasks(init_builder, cfg);
 
     TaskGraphBuilder &render_tasks_builder =
         taskgraph_mgr.init(TaskGraphID::Render);
@@ -137,7 +176,16 @@ Sim::Sim(Engine &ctx,
     }
 
     for (CountT cam_idx = 0; cam_idx < (CountT)cfg.numCams; cam_idx++) {
-        Entity cam = ctx.makeEntity<CameraEntity>();
+        Entity cam;
+        if (cfg.useDebugCamEntity) {
+            cam = ctx.makeRenderableEntity<DebugCameraEntity>();
+
+            ctx.get<Scale>(cam) = Diag3x3 { 0.1, 0.1, 0.1 };
+            ctx.get<ObjectID>(cam).idx =
+                (int32_t)RenderPrimObjectIDs::DebugCam;
+        } else {
+            cam = ctx.makeEntity<CameraEntity>();
+        }
         ctx.get<Position>(cam) = Vector3::zero();
         ctx.get<Rotation>(cam) = Quat { 1, 0, 0, 0 };
         render::RenderingSystem::attachEntityToView(

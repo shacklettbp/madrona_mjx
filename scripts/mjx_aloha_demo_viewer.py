@@ -52,6 +52,12 @@ import time
 from datetime import datetime
 from typing import Optional, Any, List, Sequence, Dict, Tuple, Union, Callable
 
+# FIXME, hacky, but need to leave decent chunk of memory for Madrona /
+# the batch renderer
+def limit_jax_mem(limit):
+    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = f"{limit:.2f}"
+limit_jax_mem(0.5)
+
 import jax
 import jax.numpy as jp
 import flax
@@ -70,7 +76,6 @@ from aloha_env import AlohaBringToTarget
 
 from madrona_mjx.viz import VisualizerGPUState, Visualizer
 
-
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('--gpu-id', type=int, default=0)
 arg_parser.add_argument('--num-worlds', type=int, required=True)
@@ -79,64 +84,16 @@ arg_parser.add_argument('--window-height', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-width', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-height', type=int, required=True)
 arg_parser.add_argument('--benchmark', type=bool, required=False, default=False)
+arg_parser.add_argument('--add-cam-debug-geo', action='store_true')
 
 args = arg_parser.parse_args()
 
 viz_gpu_state = VisualizerGPUState(args.window_width, args.window_height, args.gpu_id)
 
-# FIXME, hacky, but need to leave decent chunk of memory for Madrona /
-# the batch renderer
-def limit_jax_mem(limit):
-    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = f"{limit:.2f}"
-limit_jax_mem(0.55)
-
 # Tell XLA to use Triton GEMM
 xla_flags = os.environ.get('XLA_FLAGS', '')
 xla_flags += ' --xla_gpu_triton_gemm_any=True'
 os.environ['XLA_FLAGS'] = xla_flags
-
-
-def _measure(fn, *args) -> Tuple[float, float]:
-  """Reports jit time and op time for a function."""
-  beg = time.time()
-  compiled_fn = fn.lower(*args).compile()
-  end = time.time()
-  jit_time = end - beg
-
-  beg = time.time()
-  result = compiled_fn(*args)
-  jax.block_until_ready(result)
-  end = time.time()
-  run_time = end - beg
-
-  return jit_time, run_time
-
-
-def benchmark(env, nstep, batch_size, unroll_steps=1):
-  @jax.pmap
-  def init(key):
-    key = jax.random.split(key, batch_size // jax.device_count())
-    return jax.vmap(env.reset)(key)
-
-  key = jax.random.split(jax.random.key(0), jax.device_count())
-  d = init(key)
-  jax.block_until_ready(d)
-
-  @jax.pmap
-  def unroll(d):
-    @jax.vmap
-    def step(d, _):
-      d = env.step(d, jp.zeros(env.sys.nu))
-      return d, None
-
-    d, _ = jax.lax.scan(step, d, None, length=nstep, unroll=unroll_steps)
-
-    return d
-
-  jit_time, run_time = _measure(unroll, d)
-  steps = nstep * batch_size
-  return jit_time, run_time, steps
-
 
 if __name__ == '__main__':
   env = AlohaBringToTarget(
@@ -144,6 +101,7 @@ if __name__ == '__main__':
       gpu_id=args.gpu_id,
       width=args.batch_render_view_width,
       height=args.batch_render_view_height,
+      add_cam_debug_geo=args.add_cam_debug_geo,
       render_viz_gpu_hdls=viz_gpu_state.get_gpu_handles(),
   )
   jit_env_reset = jax.jit(jax.vmap(env.reset))

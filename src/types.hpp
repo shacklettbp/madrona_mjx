@@ -21,8 +21,9 @@ using madrona::math::Vector3;
 using madrona::math::Quat;
 
 enum class RenderPrimObjectIDs : uint32_t {
-    Plane = 0,
-    Sphere = 1,
+    DebugCam = 0,
+    Plane = 1,
+    Sphere = 2,
     NumPrims,
 };
 
@@ -48,6 +49,12 @@ struct RenderEntity : public madrona::Archetype<
 struct CameraEntity : public madrona::Archetype<
     Position,
     Rotation,
+    madrona::render::RenderCamera
+> {};
+
+struct DebugCameraEntity : public madrona::Archetype<
+    ObjectInstance,
+    madrona::render::Renderable,
     madrona::render::RenderCamera
 > {};
 

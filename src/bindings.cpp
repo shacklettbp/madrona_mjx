@@ -41,6 +41,7 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
             int64_t num_worlds,
             int64_t batch_render_view_width,
             int64_t batch_render_view_height,
+            bool add_cam_debug_geo,
             VisualizerGPUHandles *viz_gpu_hdls)
         {
             MJXModelGeometry mesh_geo {
@@ -68,6 +69,7 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
                 .numWorlds = (uint32_t)num_worlds,
                 .batchRenderViewWidth = (uint32_t)batch_render_view_width,
                 .batchRenderViewHeight = (uint32_t)batch_render_view_height,
+                .addCamDebugGeometry = add_cam_debug_geo,
             }, mjx_model, viz_gpu_hdls != nullptr ? *viz_gpu_hdls :
                 Optional<VisualizerGPUHandles>::none());
         }, nb::arg("exec_mode"),
@@ -83,8 +85,9 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
            nb::arg("num_worlds"),
            nb::arg("batch_render_view_width"),
            nb::arg("batch_render_view_height"),
+           nb::arg("add_cam_debug_geo") = false,
            nb::arg("visualizer_gpu_handles") = nb::none(),
-           nb::keep_alive<1, 15>())
+           nb::keep_alive<1, 16>())
         .def("init", [](Manager &mgr,
                         nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_pos,
                         nb::ndarray<const float, nb::shape<-1, -1, 4>> geom_rot,

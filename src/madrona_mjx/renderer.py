@@ -81,7 +81,8 @@ class BatchRenderer:
       num_worlds,
       batch_render_view_width,
       batch_render_view_height,
-      viz_gpu_hdls=None
+      add_cam_debug_geo=False,
+      viz_gpu_hdls=None,
   ):
     mesh_verts = m.mesh_vert
     mesh_faces = m.mesh_face
@@ -108,6 +109,7 @@ class BatchRenderer:
         num_worlds = num_worlds,
         batch_render_view_width = batch_render_view_width,
         batch_render_view_height = batch_render_view_height,
+        add_cam_debug_geo=add_cam_debug_geo,
         visualizer_gpu_handles = viz_gpu_hdls,
     )
 
@@ -131,6 +133,16 @@ class BatchRenderer:
     geom_quat = self.get_geom_quat(state)
     cam_quat = jax.vmap(mat_to_quat)(state.cam_xmat)
 
+    @jax.vmap
+    def invert_quat(q):
+        return jp.array([q[0], -q[1], -q[2], -q[3]])
+
+    @jax.vmap
+    def overwrite_quat(q):
+        return q.at[:].set(jp.array([1.0, 0.0, 0.0, 0.0], jp.float32))
+
+    cam_quat = overwrite_quat(cam_quat)
+
     render_token = jp.array((), jp.bool)
 
     init_rgb, init_depth, render_token = self.init_prim_fn(
@@ -143,16 +155,26 @@ class BatchRenderer:
     return render_token, init_rgb, init_depth
 
   def render(self, render_token, state):
+    geom_pos = state.geom_xpos
+    cam_pos = state.cam_xpos
     geom_quat = self.get_geom_quat(state)
     cam_quat = jax.vmap(mat_to_quat)(state.cam_xmat)
+
+    #@jax.vmap
+    #def overwrite_quat(q):
+    #    return q.at[:].set(jp.array([1.0, 0.0, 0.0, 0.0], jp.float32))
+
+    #@jax.vmap
+    #def overwrite_pos(p):
+    #    return p.at[:].set(jp.array([0, 0, 0], jp.float32))
+
+    #cam_pos = overwrite_pos(cam_pos)
+    #cam_quat = overwrite_quat(cam_quat)
 
     render_token = jp.array((), jp.bool)
 
     rgb, depth, render_token = self.render_prim_fn(render_token,
-                          state.geom_xpos,
-                          geom_quat,
-                          state.cam_xpos,
-                          cam_quat)
+        geom_pos, geom_quat, cam_pos, cam_quat)
 
     return render_token, rgb, depth
 

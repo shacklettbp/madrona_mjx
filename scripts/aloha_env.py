@@ -40,6 +40,7 @@ class AlohaBringToTarget(PipelineEnv):
 
   def __init__(self, render_batch_size: int, gpu_id: int = 0,
                width: int = 128, height: int = 128,
+               add_cam_debug_geo: bool = False, 
                render_viz_gpu_hdls = None, **kwargs):
     sys = _load_sys('./mujoco_menagerie/aloha/mjx_single_cube.xml')
     kwargs['backend'] = 'mjx'
@@ -63,7 +64,8 @@ class AlohaBringToTarget(PipelineEnv):
     self.uppers = sys.mj_model.actuator_ctrlrange[:, 1]
 
     # Madrona renderer
-    self.renderer = BatchRenderer(sys, gpu_id, render_batch_size, width, height,
+    self.renderer = BatchRenderer(sys, gpu_id, render_batch_size, 
+                                  width, height, add_cam_debug_geo,
                                   render_viz_gpu_hdls)
 
   def reset(self, rng: jax.Array) -> State:

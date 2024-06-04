@@ -71,13 +71,18 @@ static inline render::RenderManager initRenderManager(
         render_dev = viz_gpu_hdls->renderDev;
     }
 
+    uint32_t max_instances_per_world = mjx_model.numGeoms;
+    if (mgr_cfg.addCamDebugGeometry) {
+        max_instances_per_world += mjx_model.numCams;
+    }
+
     return render::RenderManager(render_api, render_dev, {
         .enableBatchRenderer = true,
         .agentViewWidth = mgr_cfg.batchRenderViewWidth,
         .agentViewHeight = mgr_cfg.batchRenderViewHeight,
         .numWorlds = mgr_cfg.numWorlds,
         .maxViewsPerWorld = mjx_model.numCams,
-        .maxInstancesPerWorld = mjx_model.numGeoms,
+        .maxInstancesPerWorld = max_instances_per_world,
         .execMode = mgr_cfg.execMode,
         .voxelCfg = {},
     });
@@ -401,6 +406,8 @@ static void loadRenderObjects(
 
     std::array<std::string, (size_t)RenderPrimObjectIDs::NumPrims> 
         render_asset_paths;
+    render_asset_paths[(size_t)RenderPrimObjectIDs::DebugCam] =
+        (std::filesystem::path(DATA_DIR) / "debugcam.obj").string();
     render_asset_paths[(size_t)RenderPrimObjectIDs::Plane] =
         (std::filesystem::path(DATA_DIR) / "plane.obj").string();
     render_asset_paths[(size_t)RenderPrimObjectIDs::Sphere] =
@@ -431,6 +438,11 @@ static void loadRenderObjects(
             mesh.materialIDX = 0;
         }
     }
+
+    // Color axes
+    disk_render_assets->objects[0].meshes[0].materialIDX = 1;
+    disk_render_assets->objects[0].meshes[1].materialIDX = 2;
+    disk_render_assets->objects[0].meshes[2].materialIDX = 3;
 
     const CountT num_meshes = (CountT)geo.numMeshes;
     for (CountT mesh_idx = 0; mesh_idx < num_meshes; mesh_idx++) {
@@ -466,6 +478,9 @@ static void loadRenderObjects(
 
     auto materials = std::to_array<imp::SourceMaterial>({
         { render::rgb8ToFloat(255, 255, 255), -1, 0.8f, 0.2f },
+        { render::rgb8ToFloat(50, 50, 255), -1, 0.8f, 0.2f },
+        { render::rgb8ToFloat(255, 50, 50), -1, 0.8f, 0.2f },
+        { render::rgb8ToFloat(50, 255, 50), -1, 0.8f, 0.2f },
     });
 
     render_mgr.loadObjects(objs, materials, {});
@@ -483,6 +498,7 @@ Manager::Impl * Manager::Impl::make(
     Sim::Config sim_cfg;
     sim_cfg.numGeoms = mjx_model.numGeoms;
     sim_cfg.numCams = mjx_model.numCams;
+    sim_cfg.useDebugCamEntity = mgr_cfg.addCamDebugGeometry;
 
     switch (mgr_cfg.execMode) {
     case ExecMode::CUDA: {
