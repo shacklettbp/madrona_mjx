@@ -36,7 +36,7 @@ def mat_to_quat(mat):
       0.25 * (mat[3] - mat[1]) / q0
   ])
 
-  q1 = 0.5 * jp.sqrt(1 + mat[0] - mat[4] - mat[8]) 
+  q1 = 0.5 * jp.sqrt(1 + mat[0] - mat[4] - mat[8])
   quat1 = jp.array([
       q1,
       0.25 * (mat[7] - mat[5]) / q1,
@@ -68,8 +68,7 @@ def mat_to_quat(mat):
   quat = jp.where(~quat0_cond & quat1_cond, quat1, quat)
   quat = jp.where(~quat0_cond & ~quat1_cond & quat2_cond, quat2, quat)
 
-  return math.normalize(quat)
-
+  return quat
 
 class BatchRenderer:
   """Wraps MJX Model around MadronaBatchRenderer."""
@@ -129,19 +128,21 @@ class BatchRenderer:
     )
     return geom_quat
 
+  def get_cam_quat(self, state):
+      def to_quat(mat):
+        q = mat_to_quat(mat)
+
+        to_y_fwd = jp.array([0.7071068, -0.7071068, 0, 0], jp.float32)
+
+        q = math.quat_mul(q, to_y_fwd)
+
+        return math.normalize(q)
+
+      return jax.vmap(to_quat)(state.cam_xmat)
+
   def init(self, state):
     geom_quat = self.get_geom_quat(state)
-    cam_quat = jax.vmap(mat_to_quat)(state.cam_xmat)
-
-    @jax.vmap
-    def invert_quat(q):
-        return jp.array([q[0], -q[1], -q[2], -q[3]])
-
-    @jax.vmap
-    def overwrite_quat(q):
-        return q.at[:].set(jp.array([1.0, 0.0, 0.0, 0.0], jp.float32))
-
-    cam_quat = overwrite_quat(cam_quat)
+    cam_quat = self.get_cam_quat(state)
 
     render_token = jp.array((), jp.bool)
 
@@ -158,18 +159,7 @@ class BatchRenderer:
     geom_pos = state.geom_xpos
     cam_pos = state.cam_xpos
     geom_quat = self.get_geom_quat(state)
-    cam_quat = jax.vmap(mat_to_quat)(state.cam_xmat)
-
-    #@jax.vmap
-    #def overwrite_quat(q):
-    #    return q.at[:].set(jp.array([1.0, 0.0, 0.0, 0.0], jp.float32))
-
-    #@jax.vmap
-    #def overwrite_pos(p):
-    #    return p.at[:].set(jp.array([0, 0, 0], jp.float32))
-
-    #cam_pos = overwrite_pos(cam_pos)
-    #cam_quat = overwrite_quat(cam_quat)
+    cam_quat = self.get_cam_quat(state)
 
     render_token = jp.array((), jp.bool)
 
