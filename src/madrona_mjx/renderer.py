@@ -4,7 +4,7 @@ import os
 from functools import partial
 
 import jax
-from jax import random, numpy as jp
+from jax import lax, random, numpy as jp
 
 import numpy as np
 from jax import core, dtypes
@@ -26,47 +26,77 @@ from mujoco.mjx._src import support
 def mat_to_quat(mat):
   """Converts 3D rotation matrix to quaternion."""
   # this is a hack to avoid reimplementing logic in mjx.camlight for quats
-  mat = mat.flatten()
+  a = mat[:, 0]
+  b = mat[:, 1]
+  c = mat[:, 2]
 
-  q0 = 0.5 * jp.sqrt(1 + mat[0] + mat[4] + mat[8])
-  quat0 = jp.array([
-      q0,
-      0.25 * (mat[7] - mat[5]) / q0,
-      0.25 * (mat[2] - mat[6]) / q0,
-      0.25 * (mat[3] - mat[1]) / q0
-  ])
+  # Converted from madrona::Quat::fromBasis to jax.
+  #
+  # Originally based on glm::quat_cast:
+  # Copyright (c) 2005 - G-Truc Creation
+  # Permission is hereby granted, free of charge, to any person obtaining a copy
+  # of this software and associated documentation files (the "Software"), to deal
+  # in the Software without restriction, including without limitation the rights
+  # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  # copies of the Software, and to permit persons to whom the Software is
+  # furnished to do so, subject to the following conditions:
+  # 
+  # The above copyright notice and this permission notice shall be included in
+  # all copies or substantial portions of the Software.
+  # 
+  # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  # THE SOFTWARE.
 
-  q1 = 0.5 * jp.sqrt(1 + mat[0] - mat[4] - mat[8])
-  quat1 = jp.array([
-      q1,
-      0.25 * (mat[7] - mat[5]) / q1,
-      0.25 * (mat[1] + mat[3]) / q1,
-      0.25 * (mat[2] + mat[6]) / q1,
-  ])
+  four_sq_minus1 = jp.array([
+      a[0] + b[1] + c[2], # w
+      a[0] - b[1] - c[2], # x
+      b[1] - a[0] - c[2], # y
+      c[2] - a[0] - b[1], # z,
+    ], jp.float32)
 
-  q2 = 0.5 * jp.sqrt(1 - mat[0] + mat[4] - mat[8])
-  quat2 = jp.array([
-      q2,
-      0.25 * (mat[2] - mat[6]) / q2,
-      0.25 * (mat[1] + mat[3]) / q2,
-      0.25 * (mat[5] + mat[7]) / q2,
-  ])
+  biggest_index = jp.argmax(four_sq_minus1)
+  biggest_val = jp.sqrt(four_sq_minus1[biggest_index] + 1) * 0.5
+  mult = 0.25 / biggest_val
 
-  q3 = 0.5 * jp.sqrt(1 - mat[0] - mat[4] + mat[8])
-  quat3 = jp.array([
-      q3,
-      0.25 * (mat[3] - mat[1]) / q3,
-      0.25 * (mat[2] + mat[6]) / q3,
-      0.25 * (mat[5] + mat[7]) / q3,
-  ])
+  def big_w(biggest, mult, a, b, c):
+      return jp.array([
+          biggest, 
+          (b[2] - c[1]) * mult,
+          (c[0] - a[2]) * mult,
+          (a[1] - b[0]) * mult,
+        ], jp.float32)
 
-  quat0_cond = (mat[0] + mat[4] + mat[8]) > 0
-  quat1_cond = (mat[0] > mat[4]) & (mat[0] > mat[8])
-  quat2_cond = mat[4] > mat[8]
+  def big_x(biggest, mult, a, b, c):
+      return jp.array([
+          (b[2] - c[1]) * mult,
+          biggest,
+          (a[1] + b[0]) * mult,
+          (c[0] + a[2]) * mult,
+        ], jp.float32)
 
-  quat = jp.where(quat0_cond, quat0, quat3)
-  quat = jp.where(~quat0_cond & quat1_cond, quat1, quat)
-  quat = jp.where(~quat0_cond & ~quat1_cond & quat2_cond, quat2, quat)
+  def big_y(biggest, mult, a, b, c):
+      return jp.array([
+          (c[0] - a[2]) * mult,
+          (a[1] + b[0]) * mult,
+          biggest,
+          (b[2] + c[1]) * mult,
+        ], jp.float32)
+
+  def big_z(biggest, mult, a, b, c):
+      return jp.array([
+          (a[1] - b[0]) * mult,
+          (c[0] + a[2]) * mult,
+          (b[2] + c[1]) * mult,
+          biggest,
+        ], jp.float32)
+
+  quat = lax.switch(biggest_index, [big_w, big_x, big_y, big_z], 
+    biggest_val, mult, a, b, c)
 
   return quat
 
