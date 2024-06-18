@@ -78,6 +78,7 @@ static inline render::RenderManager initRenderManager(
 
     return render::RenderManager(render_api, render_dev, {
         .enableBatchRenderer = true,
+        .renderMode = render::RenderManager::Config::RenderMode::Color,
         .agentViewWidth = mgr_cfg.batchRenderViewWidth,
         .agentViewHeight = mgr_cfg.batchRenderViewHeight,
         .numWorlds = mgr_cfg.numWorlds,
