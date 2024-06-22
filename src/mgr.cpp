@@ -78,7 +78,7 @@ static inline render::RenderManager initRenderManager(
 
     return render::RenderManager(render_api, render_dev, {
         .enableBatchRenderer = true,
-        .renderMode = render::RenderManager::Config::RenderMode::Color,
+        .renderMode = render::RenderManager::Config::RenderMode::Depth,
         .agentViewWidth = mgr_cfg.batchRenderViewWidth,
         .agentViewHeight = mgr_cfg.batchRenderViewHeight,
         .numWorlds = mgr_cfg.numWorlds,
@@ -421,8 +421,10 @@ static void loadRenderObjects(
         render_asset_cstrs[i] = render_asset_paths[i].c_str();
     }
 
+    imp::AssetImporter asset_importer;
+
     std::array<char, 1024> import_err;
-    auto disk_render_assets = imp::ImportedAssets::importFromDisk(
+    auto disk_render_assets = asset_importer.importFromDisk(
         render_asset_cstrs, Span<char>(import_err.data(), import_err.size()));
 
     if (!disk_render_assets.has_value()) {
