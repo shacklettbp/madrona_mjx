@@ -316,13 +316,35 @@ def _setup_jax_primitives(renderer, num_worlds, num_geoms, num_cams,
 
   def _init_prim_batch(vector_arg_values, batch_axes):
     assert all(b == batch_axes[1] for b in batch_axes[1:])
+    batch_dims = vector_arg_values[1].shape[:-2]
+    if len(batch_dims) > 1:
+      num_worlds = np.prod(batch_dims)
+      params = tuple(
+          jp.reshape(v, (num_worlds,) + v.shape[len(batch_dims):])
+          for v in vector_arg_values[1:])
+      vector_arg_values = vector_arg_values[:1] + params
+    result = _init_primitive_impl(*vector_arg_values)
     result_axes = [batch_axes[1], batch_axes[1], batch_axes[0]]
-    return _init_primitive_impl(*vector_arg_values), result_axes
+    if len(batch_dims) > 1:
+      params = [jp.reshape(v, batch_dims + v.shape[1:]) for v in result[:-1]]
+      result = params + result[-1:]
+    return result, result_axes
 
   def _render_prim_batch(vector_arg_values, batch_axes):
     assert all(b == batch_axes[1] for b in batch_axes[1:])
+    batch_dims = vector_arg_values[1].shape[:-2]
+    if len(batch_dims) > 1:
+      num_worlds = np.prod(batch_dims)
+      params = tuple(
+          jp.reshape(v, (num_worlds,) + v.shape[len(batch_dims):])
+          for v in vector_arg_values[1:])
+      vector_arg_values = vector_arg_values[:1] + params
+    result = _render_primitive_impl(*vector_arg_values)
     result_axes = [batch_axes[1], batch_axes[1], batch_axes[0]]
-    return _render_primitive_impl(*vector_arg_values), result_axes
+    if len(batch_dims) > 1:
+      params = [jp.reshape(v, batch_dims + v.shape[1:]) for v in result[:-1]]
+      result = params + result[-1:]
+    return result, result_axes
 
   batching.primitive_batchers[_init_primitive] = _init_prim_batch
   batching.primitive_batchers[_render_primitive] = _render_prim_batch
