@@ -101,7 +101,7 @@ struct Visualizer {
                     cudaMemcpyDeviceToHost);
             raycast_tensor = (char *)print_ptr;
 
-            ImGui::Begin("Raycast");
+            ImGui::Begin("Depth Tensor Debug");
 
             auto draw2 = ImGui::GetWindowDrawList();
             ImVec2 windowPos = ImGui::GetWindowPos();
@@ -129,10 +129,10 @@ struct Visualizer {
                             255);
 
                     draw2->AddRectFilled(
-                        { (i * pixSpace) + windowPos.x, 
-                          (j * pixSpace) + windowPos.y +vertOff }, 
-                        { (i * pixSpace + pixScale) + windowPos.x,   
-                          (j * pixSpace + pixScale)+ +windowPos.y+vertOff },
+                        { (j * pixSpace) + windowPos.x, 
+                          (i * pixSpace) + windowPos.y +vertOff }, 
+                        { (j * pixSpace + pixScale) + windowPos.x,   
+                          (i * pixSpace + pixScale)+ +windowPos.y+vertOff },
                         realColor, 0, 0);
                 }
             }

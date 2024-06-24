@@ -78,6 +78,7 @@ arg_parser.add_argument('--batch-render-view-width', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-height', type=int, required=True)
 arg_parser.add_argument('--benchmark', type=bool, required=False, default=False)
 arg_parser.add_argument('--render-mj', type=bool, required=False, default=False)
+arg_parser.add_argument('--use-raytracer', action='store_true')
 
 args = arg_parser.parse_args()
 
