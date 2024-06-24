@@ -76,8 +76,8 @@ arg_parser.add_argument('--num-worlds', type=int, required=True)
 arg_parser.add_argument('--num-steps', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-width', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-height', type=int, required=True)
-arg_parser.add_argument('--benchmark', type=bool, required=False, default=False)
-arg_parser.add_argument('--render-mj', type=bool, required=False, default=False)
+arg_parser.add_argument('--benchmark', action='store_true')
+arg_parser.add_argument('--render-mj', action='store_true')
 arg_parser.add_argument('--use-raytracer', action='store_true')
 
 args = arg_parser.parse_args()
@@ -142,7 +142,8 @@ if __name__ == '__main__':
       render_batch_size=args.num_worlds,
       gpu_id=args.gpu_id,
       width=args.batch_render_view_width,
-      height=args.batch_render_view_height
+      height=args.batch_render_view_height,
+      use_rt=args.use_raytracer,
   )
   jit_env_reset = jax.jit(jax.vmap(env.reset))
   jit_env_step = jax.jit(jax.vmap(env.step))

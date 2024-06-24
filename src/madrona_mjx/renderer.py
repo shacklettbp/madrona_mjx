@@ -126,7 +126,6 @@ class BatchRenderer:
     num_cams = m.ncam
 
     self.madrona = MadronaBatchRenderer(
-        exec_mode = ExecMode.CUDA,
         gpu_id = gpu_id,
         mesh_vertices = mesh_verts,
         mesh_faces = mesh_faces,

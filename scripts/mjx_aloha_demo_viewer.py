@@ -83,7 +83,6 @@ arg_parser.add_argument('--window-width', type=int, required=True)
 arg_parser.add_argument('--window-height', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-width', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-height', type=int, required=True)
-arg_parser.add_argument('--benchmark', type=bool, required=False, default=False)
 arg_parser.add_argument('--add-cam-debug-geo', action='store_true')
 arg_parser.add_argument('--use-raytracer', action='store_true')
 
