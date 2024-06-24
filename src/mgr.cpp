@@ -95,6 +95,7 @@ struct Manager::Impl {
     uint32_t numCams;
     Optional<RenderGPUState> renderGPUState;
     render::RenderManager renderMgr;
+    bool useRT;
 
     inline Impl(const Manager::Config &mgr_cfg,
                 uint32_t num_geoms,
@@ -105,7 +106,8 @@ struct Manager::Impl {
           numGeoms(num_geoms),
           numCams(num_cams),
           renderGPUState(std::move(render_gpu_state)),
-          renderMgr(std::move(render_mgr))
+          renderMgr(std::move(render_mgr)),
+          useRT(mgr_cfg.useRT)
     {}
 
     inline virtual ~Impl() {}
@@ -120,10 +122,13 @@ struct Manager::Impl {
     virtual void gpuStreamRender(cudaStream_t strm, void **buffers) = 0;
 #endif
 
-    inline void renderCommon()
+    inline void renderCommon(bool rast = true)
     {
         renderMgr.readECS();
-        renderMgr.batchRender();
+
+        if (rast) {
+            renderMgr.batchRender();
+        }
     }
 
     virtual Tensor exportTensor(ExportID slot,
@@ -222,20 +227,33 @@ struct Manager::CPUImpl final : Manager::Impl {
 struct Manager::CUDAImpl final : Manager::Impl {
     MWCudaExecutor gpuExec;
     MWCudaLaunchGraph renderGraph;
+    Optional<MWCudaLaunchGraph> raytraceGraph;
 
     inline CUDAImpl(const Manager::Config &mgr_cfg,
                     uint32_t num_geoms,
                     uint32_t num_cams,
                     Optional<RenderGPUState> &&render_gpu_state,
                     render::RenderManager &&render_mgr,
-                    MWCudaExecutor &&gpu_exec)
+                    MWCudaExecutor &&gpu_exec,
+                    Optional<MWCudaLaunchGraph> &&raytrace_graph)
         : Impl(mgr_cfg, num_geoms, num_cams,
                std::move(render_gpu_state), std::move(render_mgr)),
           gpuExec(std::move(gpu_exec)),
-          renderGraph(gpuExec.buildLaunchGraph(TaskGraphID::Render))
+          renderGraph(gpuExec.buildLaunchGraph(TaskGraphID::Render)),
+          raytraceGraph(std::move(raytrace_graph))
     {}
 
     inline virtual ~CUDAImpl() final {}
+
+    inline void renderImpl()
+    {
+        bool use_rt = raytraceGraph.has_value();
+        renderCommon(!use_rt);
+
+        if (use_rt) {
+            gpuExec.run(*raytraceGraph);
+        }
+    }
 
     inline void copyInTransforms(Vector3 *geom_positions,
                                  Quat *geom_rotations,
@@ -289,7 +307,8 @@ struct Manager::CUDAImpl final : Manager::Impl {
                          cam_positions, cam_rotations, 0);
 
         gpuExec.run(renderGraph);
-        renderCommon();
+
+        renderImpl();
     }
 
     struct JAXIO {
@@ -356,7 +375,8 @@ struct Manager::CUDAImpl final : Manager::Impl {
         // Currently a CPU sync is needed to read back the total number of
         // instances for Vulkan
         REQ_CUDA(cudaStreamSynchronize(strm));
-        renderCommon();
+
+        renderImpl();
 
         copyOutRendered(jax_io.rgbOut, jax_io.depthOut, strm);
     }
@@ -384,7 +404,8 @@ struct Manager::CUDAImpl final : Manager::Impl {
         // Currently a CPU sync is needed to read back the total number of
         // instances for Vulkan
         REQ_CUDA(cudaStreamSynchronize(strm));
-        renderCommon();
+
+        renderImpl();
 
         copyOutRendered(jax_io.rgbOut, jax_io.depthOut, strm);
     }
@@ -399,9 +420,15 @@ struct Manager::CUDAImpl final : Manager::Impl {
 };
 #endif
 
-static void loadRenderObjects(
+struct RTAssets {
+    render::MeshBVHData bvhData;
+    render::MaterialData matData;
+};
+
+static RTAssets loadRenderObjects(
     const MJXModelGeometry &geo,
-    render::RenderManager &render_mgr)
+    render::RenderManager &render_mgr,
+    bool use_rt)
 {
     using namespace imp;
 
@@ -493,6 +520,18 @@ static void loadRenderObjects(
     render_mgr.configureLighting({
         { true, math::Vector3{1.0f, 1.0f, -2.0f}, math::Vector3{1.0f, 1.0f, 1.0f} }
     });
+
+    if (use_rt) {
+        return {
+            render::AssetProcessor::makeBVHData(objs),
+            render::AssetProcessor::initMaterialData(materials.data(),
+                                     materials.size(),
+                                     nullptr,
+                                     0)
+        };
+    } else {
+        return {};
+    }
 }
 
 Manager::Impl * Manager::Impl::make(
@@ -500,10 +539,19 @@ Manager::Impl * Manager::Impl::make(
     const MJXModel &mjx_model,
     const Optional<VisualizerGPUHandles> &viz_gpu_hdls)
 {
+    bool use_rt = mgr_cfg.useRT;
+
+    if (use_rt) {
+        printf("Using raytracer\n");
+    } else {
+        printf("Using rasterizer\n");
+    }
+
     Sim::Config sim_cfg;
     sim_cfg.numGeoms = mjx_model.numGeoms;
     sim_cfg.numCams = mjx_model.numCams;
     sim_cfg.useDebugCamEntity = mgr_cfg.addCamDebugGeometry;
+    sim_cfg.useRT = use_rt;
 
     switch (mgr_cfg.execMode) {
     case ExecMode::CUDA: {
@@ -517,7 +565,8 @@ Manager::Impl * Manager::Impl::make(
             initRenderManager(mgr_cfg, mjx_model,
                               viz_gpu_hdls, render_gpu_state);
 
-        loadRenderObjects(mjx_model.meshGeo, render_mgr);
+        RTAssets rt_assets = loadRenderObjects(
+                mjx_model.meshGeo, render_mgr, use_rt);
         sim_cfg.renderBridge = render_mgr.bridge();
 
         int32_t *geom_types_gpu = (int32_t *)cu::allocGPU(
@@ -540,6 +589,16 @@ Manager::Impl * Manager::Impl::make(
 
         HeapArray<Sim::WorldInit> world_inits(mgr_cfg.numWorlds);
 
+        CudaBatchRenderConfig render_cfg = {};
+        if (use_rt) {
+            render_cfg.renderMode = CudaBatchRenderConfig::RenderMode::Depth;
+            render_cfg.geoBVHData = rt_assets.bvhData;
+            render_cfg.materialData = rt_assets.matData;
+            render_cfg.renderResolution = mgr_cfg.batchRenderViewWidth;
+            render_cfg.nearPlane = 0.001f;
+            render_cfg.farPlane = 1000.0f;
+        }
+
         MWCudaExecutor gpu_exec({
             .worldInitPtr = world_inits.data(),
             .numWorldInitBytes = sizeof(Sim::WorldInit),
@@ -554,7 +613,16 @@ Manager::Impl * Manager::Impl::make(
             { GPU_HIDESEEK_SRC_LIST },
             { GPU_HIDESEEK_COMPILE_FLAGS },
             CompileConfig::OptMode::LTO,
-        }, cu_ctx);
+        }, cu_ctx, render_cfg);
+
+        Optional<MWCudaLaunchGraph> raytrace_graph = [&]() -> 
+                Optional<MWCudaLaunchGraph> {
+            if (use_rt) {
+                return gpu_exec.buildRenderGraph();
+            } else {
+                return Optional<MWCudaLaunchGraph>::none();
+            }
+        } ();
 
         cu::deallocGPU(geom_types_gpu);
         cu::deallocGPU(geom_data_ids_gpu);
@@ -567,6 +635,7 @@ Manager::Impl * Manager::Impl::make(
             std::move(render_gpu_state),
             std::move(render_mgr),
             std::move(gpu_exec),
+            std::move(raytrace_graph)
         };
 #else
         FATAL("Madrona was not compiled with CUDA support");
@@ -580,7 +649,7 @@ Manager::Impl * Manager::Impl::make(
             initRenderManager(mgr_cfg, mjx_model,
                               viz_gpu_hdls, render_gpu_state);
 
-        loadRenderObjects(mjx_model.meshGeo, render_mgr);
+        loadRenderObjects(mjx_model.meshGeo, render_mgr, false);
         sim_cfg.renderBridge = render_mgr.bridge();
 
         sim_cfg.geomTypes = mjx_model.geomTypes;
@@ -705,20 +774,47 @@ Tensor Manager::rgbTensor() const
 
 Tensor Manager::depthTensor() const
 {
-    const float *depth_ptr = impl_->renderMgr.batchRendererDepthOut();
+    if (impl_->useRT) {
+        return impl_->exportTensor(ExportID::RaycastDepth,
+                                   TensorElementType::Float32,
+                                   {
+                                       impl_->cfg.numWorlds,
+                                       impl_->numCams,
+                                       impl_->cfg.batchRenderViewHeight,
+                                       impl_->cfg.batchRenderViewWidth,
+                                       1
+                                   });
+    } else {
+        const float *depth_ptr = impl_->renderMgr.batchRendererDepthOut();
 
-    return Tensor((void *)depth_ptr, TensorElementType::Float32, {
-        impl_->cfg.numWorlds,
-        impl_->numCams,
-        impl_->cfg.batchRenderViewHeight,
-        impl_->cfg.batchRenderViewWidth,
-        1,
-    }, impl_->cfg.gpuID);
+        return Tensor((void *)depth_ptr, TensorElementType::Float32, {
+            impl_->cfg.numWorlds,
+            impl_->numCams,
+            impl_->cfg.batchRenderViewHeight,
+            impl_->cfg.batchRenderViewWidth,
+            1,
+        }, impl_->cfg.gpuID);
+    }
 }
 
 uint32_t Manager::numWorlds() const
 {
     return impl_->cfg.numWorlds;
+}
+
+uint32_t Manager::numCams() const
+{
+    return impl_->numCams;
+}
+
+uint32_t Manager::batchViewWidth() const
+{
+    return impl_->cfg.batchRenderViewWidth;
+}
+
+uint32_t Manager::batchViewHeight() const
+{
+    return impl_->cfg.batchRenderViewHeight;
 }
 
 render::RenderManager & Manager::getRenderManager()

@@ -56,7 +56,7 @@ from typing import Optional, Any, List, Sequence, Dict, Tuple, Union, Callable
 # the batch renderer
 def limit_jax_mem(limit):
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = f"{limit:.2f}"
-limit_jax_mem(0.5)
+limit_jax_mem(0.1)
 
 import jax
 import jax.numpy as jp
@@ -85,6 +85,7 @@ arg_parser.add_argument('--batch-render-view-width', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-height', type=int, required=True)
 arg_parser.add_argument('--benchmark', type=bool, required=False, default=False)
 arg_parser.add_argument('--add-cam-debug-geo', action='store_true')
+arg_parser.add_argument('--use-raytracer', action='store_true')
 
 args = arg_parser.parse_args()
 
@@ -102,6 +103,7 @@ if __name__ == '__main__':
       width=args.batch_render_view_width,
       height=args.batch_render_view_height,
       add_cam_debug_geo=args.add_cam_debug_geo,
+      use_rt=args.use_raytracer,
       render_viz_gpu_hdls=viz_gpu_state.get_gpu_handles(),
   )
   jit_env_reset = jax.jit(jax.vmap(env.reset))

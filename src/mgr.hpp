@@ -53,6 +53,7 @@ public:
         uint32_t batchRenderViewWidth;
         uint32_t batchRenderViewHeight;
         bool addCamDebugGeometry = false;
+        bool useRT = false;
     };
 
     MGR_EXPORT Manager(
@@ -88,6 +89,11 @@ public:
     MGR_EXPORT madrona::py::Tensor depthTensor() const;
 
     MGR_EXPORT uint32_t numWorlds() const;
+    MGR_EXPORT uint32_t numCams() const;
+
+    MGR_EXPORT uint32_t batchViewWidth() const;
+    MGR_EXPORT uint32_t batchViewHeight() const;
+
     MGR_EXPORT madrona::render::RenderManager & getRenderManager();
 
 private:

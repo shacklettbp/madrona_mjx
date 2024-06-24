@@ -40,6 +40,11 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
         registry.exportColumn<CameraEntity, Rotation>(
             (uint32_t)ExportID::CameraRotations);
     }
+
+    if (cfg.useRT) {
+        registry.exportColumn<render::RaycastOutputArchetype, 
+            render::RenderOutputBuffer>((uint32_t)ExportID::RaycastDepth);
+    }
 }
 
 #if 0

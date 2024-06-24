@@ -111,6 +111,7 @@ class BatchRenderer:
       batch_render_view_width,
       batch_render_view_height,
       add_cam_debug_geo=False,
+      use_rt=False,
       viz_gpu_hdls=None,
   ):
     mesh_verts = m.mesh_vert
@@ -139,6 +140,7 @@ class BatchRenderer:
         batch_render_view_width = batch_render_view_width,
         batch_render_view_height = batch_render_view_height,
         add_cam_debug_geo=add_cam_debug_geo,
+        use_rt=use_rt,
         visualizer_gpu_handles = viz_gpu_hdls,
     )
 
