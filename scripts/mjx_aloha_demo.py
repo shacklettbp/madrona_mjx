@@ -136,6 +136,8 @@ def benchmark(env, nstep, batch_size, unroll_steps=1):
   steps = nstep * batch_size
   return jit_time, run_time, steps
 
+def txfm_depth(v):
+    return jp.repeat(jp.log(v + 0.9) / jp.log(10000), repeats=3, axis=-1)
 
 if __name__ == '__main__':
   env = AlohaBringToTarget(
@@ -161,8 +163,8 @@ if __name__ == '__main__':
 
   # render a video for a single env/camera
   for i in range(env.sys.ncam):
-    rgbs = np.array([r.info['rgb'][0, i, ..., :3] for r in rollout])
-    media.write_video(f'video_madrona_{i}.mp4', rgbs / 255., fps=1.0 / env.dt)
+    depths = np.array([txfm_depth(r.info['depth'][0, i, ...]) for r in rollout])
+    media.write_video(f'video_madrona_{i}.mp4', depths, fps=1.0 / env.dt)
 
     if args.render_mj:
       camera_name = support.id2name(env.sys.mj_model, mujoco.mjtObj.mjOBJ_CAMERA, i)
