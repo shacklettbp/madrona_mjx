@@ -192,8 +192,6 @@ class BatchRenderer:
     geom_quat = self.get_geom_quat(state)
     cam_quat = self.get_cam_quat(state)
 
-    render_token = jp.array((), jp.bool)
-
     rgb, depth, render_token = self.render_prim_fn(render_token,
         geom_pos, geom_quat, cam_pos, cam_quat)
 
