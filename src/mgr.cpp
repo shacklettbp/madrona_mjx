@@ -210,9 +210,12 @@ struct Manager::Impl {
         MWCudaLaunchGraph init_graph =
             gpuExec.buildLaunchGraph(TaskGraphID::Init);
 
+        gpuExec.run(init_graph);
+
         copyInTransforms(geom_positions, geom_rotations,
                          cam_positions, cam_rotations, 0);
-        gpuExec.run(init_graph);
+
+        gpuExec.run(renderGraph);
         renderImpl();
     }
 
@@ -260,10 +263,13 @@ struct Manager::Impl {
 
         JAXIO jax_io = JAXIO::make(buffers);
 
+        gpuExec.runAsync(init_graph, strm);
+
         copyInTransforms(jax_io.geomPositions, jax_io.geomRotations,
                          jax_io.camPositions, jax_io.camRotations, strm);
 
-        gpuExec.runAsync(init_graph, strm);
+        gpuExec.runAsync(renderGraph, strm);
+
         // Currently a CPU sync is needed to read back the total number of
         // instances for Vulkan
         REQ_CUDA(cudaStreamSynchronize(strm));

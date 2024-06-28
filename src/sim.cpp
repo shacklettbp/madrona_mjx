@@ -99,11 +99,9 @@ static void setupInitTasks(TaskGraphBuilder &builder,
     }
 
     sort_sys = queueSortByWorld<RenderEntity>(builder, {sort_sys});
-
-    setupRenderTasks(builder, {sort_sys});
 #else
+    (void)builder;
     (void)cfg;
-    setupRenderTasks(builder, {});
 #endif
 }
 
