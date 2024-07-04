@@ -33,8 +33,12 @@ struct MJXModel {
     MJXModelGeometry meshGeo;
     int32_t *geomTypes;
     int32_t *geomDataIDs;
+    int32_t *geomMatIDs;
     madrona::math::Vector3 *geomSizes;
+    madrona::math::Vector4 *geomRGBA;
+    madrona::math::Vector4 *matRGBA;
     uint32_t numGeoms;
+    uint32_t numMats;
     uint32_t numCams;
 };
 

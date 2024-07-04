@@ -129,7 +129,6 @@ Sim::Sim(Engine &ctx,
         ctx.get<Rotation>(instance) = Quat { 1, 0, 0, 0 };
 
         Diag3x3 scale;
-        int32_t render_obj_idx;
         switch ((MJXGeomType)cfg.geomTypes[geom_idx]) {
         case MJXGeomType::Plane: {
             // FIXME
@@ -138,7 +137,6 @@ Sim::Sim(Engine &ctx,
             scale.d1 = plane_scale;
             scale.d2 = plane_scale;
             scale = { 0, 0, 0 }; // Hack
-            render_obj_idx = (int32_t)RenderPrimObjectIDs::Plane;
         } break;
         case MJXGeomType::Sphere: {
             float sphere_scale = cfg.geomSizes[geom_idx].x;
@@ -146,7 +144,6 @@ Sim::Sim(Engine &ctx,
             scale.d1 = sphere_scale;
             scale.d2 = sphere_scale;
             scale = { 0, 0, 0 }; // Hack
-            render_obj_idx = (int32_t)RenderPrimObjectIDs::Sphere;
         } break;
         case MJXGeomType::Capsule: {
             Vector3 geom_size = cfg.geomSizes[geom_idx];
@@ -154,19 +151,15 @@ Sim::Sim(Engine &ctx,
             scale.d1 = geom_size.y;
             scale.d2 = geom_size.z;
             scale = { 0, 0, 0 }; // Hack
-            render_obj_idx = (int32_t)RenderPrimObjectIDs::Sphere;
         } break;
         case MJXGeomType::Box: {
             Vector3 geom_size = cfg.geomSizes[geom_idx];
             scale.d0 = geom_size.x;
             scale.d1 = geom_size.y;
             scale.d2 = geom_size.z;
-            render_obj_idx = (int32_t)RenderPrimObjectIDs::Box;
         } break;
         case MJXGeomType::Mesh: {
             scale = Diag3x3 { 1, 1, 1 };
-            render_obj_idx = (int32_t)RenderPrimObjectIDs::NumPrims +
-                cfg.geomDataIDs[geom_idx];
         } break;
         case MJXGeomType::Heightfield:
         case MJXGeomType::Ellipsoid:
@@ -178,7 +171,7 @@ Sim::Sim(Engine &ctx,
         } break;
         }
         ctx.get<Scale>(instance) = scale;
-        ctx.get<ObjectID>(instance) = ObjectID { render_obj_idx };
+        ctx.get<ObjectID>(instance) = ObjectID { cfg.geomDataIDs[geom_idx] };
     }
 
     for (CountT cam_idx = 0; cam_idx < (CountT)cfg.numCams; cam_idx++) {
@@ -187,8 +180,7 @@ Sim::Sim(Engine &ctx,
             cam = ctx.makeRenderableEntity<DebugCameraEntity>();
 
             ctx.get<Scale>(cam) = Diag3x3 { 0.1, 0.1, 0.1 };
-            ctx.get<ObjectID>(cam).idx =
-                (int32_t)RenderPrimObjectIDs::DebugCam;
+            ctx.get<ObjectID>(cam).idx = cfg.numGeoms;
         } else {
             cam = ctx.makeEntity<CameraEntity>();
         }
