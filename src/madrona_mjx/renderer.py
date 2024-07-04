@@ -122,6 +122,9 @@ class BatchRenderer:
     # TODO: filter geom groups
     geom_data_ids = m.geom_dataid
     geom_sizes = jax.device_get(m.geom_size)
+    geom_mat_ids = m.geom_matid
+    geom_rgba = m.geom_rgba
+    mat_rgba = m.mat_rgba
     # TODO: filter for camera ids
     num_cams = m.ncam
 
@@ -134,6 +137,9 @@ class BatchRenderer:
         geom_types = geom_types,
         geom_data_ids = geom_data_ids,
         geom_sizes = geom_sizes,
+        geom_mat_ids = geom_mat_ids,
+        geom_rgba = geom_rgba,
+        mat_rgba = mat_rgba,
         num_cams = num_cams,
         num_worlds = num_worlds,
         batch_render_view_width = batch_render_view_width,

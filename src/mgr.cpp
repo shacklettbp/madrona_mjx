@@ -82,7 +82,7 @@ static inline Optional<render::RenderManager> initRenderManager(
 
     return render::RenderManager(render_api, render_dev, {
         .enableBatchRenderer = true,
-        .renderMode = render::RenderManager::Config::RenderMode::Depth,
+        .renderMode = render::RenderManager::Config::RenderMode::RGBD,
         .agentViewWidth = mgr_cfg.batchRenderViewWidth,
         .agentViewHeight = mgr_cfg.batchRenderViewHeight,
         .numWorlds = mgr_cfg.numWorlds,
@@ -241,18 +241,33 @@ struct Manager::Impl {
         }
     }
 
+    inline const uint8_t * getRGBOut() const
+    {
+        if (cfg.useRT) {
+            FATAL("No RGB from raytracing support currently");
+            return nullptr;
+        } else {
+            return renderMgr->batchRendererRGBOut();
+        }
+    }
+
     inline void copyOutRendered(uint8_t *rgb_out, float *depth_out,
                                 cudaStream_t strm)
-    {
-        // FIXME we just don't touch RGB now
-        (void)rgb_out;
-        
+    {  
         cudaMemcpyAsync(depth_out, getDepthOut(),
                         sizeof(float) *
                         (size_t)cfg.batchRenderViewWidth *
                         (size_t)cfg.batchRenderViewHeight *
                         (size_t)cfg.numWorlds *
                         (size_t)numCams,
+                        cudaMemcpyDeviceToDevice, strm);
+
+        cudaMemcpyAsync(rgb_out, getRGBOut(),
+                        sizeof(uint8_t) *
+                        (size_t)cfg.batchRenderViewWidth *
+                        (size_t)cfg.batchRenderViewHeight *
+                        (size_t)cfg.numWorlds *
+                        (size_t)numCams * 4,
                         cudaMemcpyDeviceToDevice, strm);
     }
 
@@ -323,7 +338,7 @@ struct RTAssets {
 };
 
 static RTAssets loadRenderObjects(
-    const MJXModelGeometry &geo,
+    const MJXModel &model,
     Optional<render::RenderManager> &render_mgr,
     bool use_rt)
 {
@@ -355,61 +370,112 @@ static RTAssets loadRenderObjects(
         FATAL("Failed to load render assets from disk: %s", import_err);
     }
 
-    HeapArray<SourceMesh> meshes(geo.numMeshes);
-
-    const CountT num_disk_objs = disk_render_assets->objects.size();
-    HeapArray<SourceObject> objs(num_disk_objs + geo.numMeshes);
-
-    for (CountT i = 0; i < num_disk_objs; i++) {
-        objs[i] = disk_render_assets->objects[i];
-        for (auto &mesh : objs[i].meshes) {
-            mesh.materialIDX = 0;
-        }
-    }
-
-    // Color axes
-    disk_render_assets->objects[0].meshes[0].materialIDX = 1;
-    disk_render_assets->objects[0].meshes[1].materialIDX = 2;
-    disk_render_assets->objects[0].meshes[2].materialIDX = 3;
-
-    const CountT num_meshes = (CountT)geo.numMeshes;
+    HeapArray<SourceMesh> meshes(model.meshGeo.numMeshes);
+    const CountT num_meshes = (CountT)model.meshGeo.numMeshes;
+    
     for (CountT mesh_idx = 0; mesh_idx < num_meshes; mesh_idx++) {
-        uint32_t mesh_vert_offset = geo.vertexOffsets[mesh_idx];
+        uint32_t mesh_vert_offset = model.meshGeo.vertexOffsets[mesh_idx];
         uint32_t next_vert_offset = mesh_idx < num_meshes - 1 ?
-            geo.vertexOffsets[mesh_idx + 1] : geo.numVertices;
+            model.meshGeo.vertexOffsets[mesh_idx + 1] : model.meshGeo.numVertices;
 
-        uint32_t mesh_tri_offset = geo.triOffsets[mesh_idx];
+        uint32_t mesh_tri_offset = model.meshGeo.triOffsets[mesh_idx];
         uint32_t next_tri_offset = mesh_idx < num_meshes - 1 ?
-            geo.triOffsets[mesh_idx + 1] : geo.numTris;
+            model.meshGeo.triOffsets[mesh_idx + 1] : model.meshGeo.numTris;
 
         uint32_t mesh_num_verts = next_vert_offset - mesh_vert_offset;
         uint32_t mesh_num_tris = next_tri_offset - mesh_tri_offset;
         uint32_t mesh_idx_offset = mesh_tri_offset * 3;
 
         meshes[mesh_idx] = {
-            .positions = geo.vertices + mesh_vert_offset,
+            .positions = model.meshGeo.vertices + mesh_vert_offset,
             .normals = nullptr,
             .tangentAndSigns = nullptr,
             .uvs = nullptr,
-            .indices = geo.indices + mesh_idx_offset,
+            .indices = model.meshGeo.indices + mesh_idx_offset,
             .faceCounts = nullptr,
             .faceMaterials = nullptr,
             .numVertices = mesh_num_verts,
             .numFaces = mesh_num_tris,
             .materialIDX = 0,
         };
-
-        objs[num_disk_objs + mesh_idx] = {
-            .meshes = Span<SourceMesh>(&meshes[mesh_idx], 1),
-        };
     }
 
-    auto materials = std::to_array<imp::SourceMaterial>({
-        { render::rgb8ToFloat(255, 255, 255), -1, 0.8f, 0.2f },
-        { render::rgb8ToFloat(50, 50, 255), -1, 0.8f, 0.2f },
-        { render::rgb8ToFloat(255, 50, 50), -1, 0.8f, 0.2f },
-        { render::rgb8ToFloat(50, 255, 50), -1, 0.8f, 0.2f },
-    });
+    std::vector<imp::SourceMaterial> materials;
+    for (CountT i = 0; i < model.numMats; i++) {
+        SourceMaterial mat = {
+            .color = math::Vector4{
+                model.matRGBA[i].x, model.matRGBA[i].y,
+                model.matRGBA[i].z, model.matRGBA[i].w},
+            .textureIdx = -1,
+            .roughness = 0.8f,
+            .metalness = 0.2f};
+        materials.push_back(mat);
+    }
+
+    // Create materials for geoms that do not have one, and avoid repeated
+    for (CountT i = 0; i < model.numGeoms; i++) {
+        if (model.geomMatIDs[i] == -1) {
+            SourceMaterial mat = {
+                .color = math::Vector4{
+                    model.geomRGBA[i].x, model.geomRGBA[i].y,
+                    model.geomRGBA[i].z, model.geomRGBA[i].w},
+                .textureIdx = -1,
+                .roughness = 0.8f,
+                .metalness = 0.2f,
+            };
+            materials.push_back(mat);
+            model.geomMatIDs[i] = materials.size() - 1;
+
+            for (CountT j = i + 1; j < model.numGeoms; j++) {
+                // FIX: Should probably implement == op for Vector4
+                if (model.geomMatIDs[j] == -1 && 
+                    model.geomRGBA[i].x == model.geomRGBA[j].x &&
+                    model.geomRGBA[i].y == model.geomRGBA[j].y &&
+                    model.geomRGBA[i].z == model.geomRGBA[j].z &&
+                    model.geomRGBA[i].w == model.geomRGBA[j].w) 
+                {
+                    model.geomMatIDs[j] = materials.size() - 1;
+                }
+            }
+        }
+    }
+
+    HeapArray<SourceObject> objs(model.numGeoms + 1);
+    
+    for (CountT i = 0; i < model.numGeoms; i++) {
+        switch ((MJXGeomType)model.geomTypes[i]) {
+        case MJXGeomType::Plane: {
+            objs[i] = disk_render_assets->objects[(int)RenderPrimObjectIDs::Plane];
+        } break;
+        case MJXGeomType::Sphere: {
+            objs[i] = disk_render_assets->objects[(int)RenderPrimObjectIDs::Sphere]; 
+        } break;
+        case MJXGeomType::Capsule: {
+            objs[i] = disk_render_assets->objects[(int)RenderPrimObjectIDs::Sphere]; 
+        } break;
+        case MJXGeomType::Box: {
+            objs[i] = disk_render_assets->objects[(int)RenderPrimObjectIDs::Box]; 
+        } break;
+        case MJXGeomType::Mesh: {
+            objs[i] = {
+                .meshes = Span<SourceMesh>(&meshes[model.geomDataIDs[i]], 1)};
+        } break;
+        case MJXGeomType::Heightfield:
+        case MJXGeomType::Ellipsoid:
+        case MJXGeomType::Cylinder:
+        default:
+            FATAL("Unsupported geom type");
+            break;
+        }
+
+        model.geomDataIDs[i] = i;
+        for (auto &mesh : objs[i].meshes) {
+            mesh.materialIDX = model.geomMatIDs[i];
+        }
+    }
+    
+    objs[model.numGeoms] = disk_render_assets->objects[(int)RenderPrimObjectIDs::DebugCam];
+    objs[model.numGeoms].materialIDX = 0;
 
     if (render_mgr.has_value()) {
         render_mgr->loadObjects(objs, materials, {});
@@ -461,7 +527,7 @@ Manager::Impl * Manager::Impl::make(
                           viz_gpu_hdls, render_gpu_state);
 
     RTAssets rt_assets = loadRenderObjects(
-            mjx_model.meshGeo, render_mgr, use_rt);
+            mjx_model, render_mgr, use_rt);
     if (render_mgr.has_value()) {
         sim_cfg.renderBridge = render_mgr->bridge();
     } else {
