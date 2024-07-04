@@ -475,7 +475,9 @@ static RTAssets loadRenderObjects(
     }
     
     objs[model.numGeoms] = disk_render_assets->objects[(int)RenderPrimObjectIDs::DebugCam];
-    objs[model.numGeoms].materialIDX = 0;
+    for (auto &mesh : objs[model.numGeoms].meshes) {
+        mesh.materialIDX = 0;
+    }
 
     if (render_mgr.has_value()) {
         render_mgr->loadObjects(objs, materials, {});
