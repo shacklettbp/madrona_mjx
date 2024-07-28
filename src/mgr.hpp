@@ -32,14 +32,17 @@ struct MJXModelGeometry {
 struct MJXModel {
     MJXModelGeometry meshGeo;
     int32_t *geomTypes;
+    int32_t *geomGroups;
     int32_t *geomDataIDs;
     int32_t *geomMatIDs;
+    int32_t *enabledGeomGroups;
     madrona::math::Vector3 *geomSizes;
     madrona::math::Vector4 *geomRGBA;
     madrona::math::Vector4 *matRGBA;
     uint32_t numGeoms;
     uint32_t numMats;
     uint32_t numCams;
+    uint32_t numEnabledGeomGroups;
 };
 
 // The Manager class encapsulates the linkage between the outside training
