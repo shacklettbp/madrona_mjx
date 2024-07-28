@@ -412,7 +412,7 @@ static RTAssets loadRenderObjects(
         materials.push_back(mat);
     }
 
-    // Create materials for geoms that do not have one, and avoid repeated
+    // Create materials for geoms that do not have one assigned
     for (CountT i = 0; i < model.numGeoms; i++) {
         if (model.geomMatIDs[i] == -1) {
             SourceMaterial mat = {
@@ -468,9 +468,18 @@ static RTAssets loadRenderObjects(
             break;
         }
 
-        model.geomDataIDs[i] = i;
         for (auto &mesh : objs[i].meshes) {
             mesh.materialIDX = model.geomMatIDs[i];
+        }
+
+        model.geomDataIDs[i] = -1;
+        for (CountT geom_i = 0; geom_i < model.numEnabledGeomGroups; geom_i++)
+        {
+            if (model.geomGroups[i] == model.enabledGeomGroups[geom_i])
+            {
+                model.geomDataIDs[i] = i;
+                break;
+            }
         }
     }
     

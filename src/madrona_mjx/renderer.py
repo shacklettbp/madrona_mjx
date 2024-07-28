@@ -110,6 +110,7 @@ class BatchRenderer:
       num_worlds,
       batch_render_view_width,
       batch_render_view_height,
+      enabled_geom_groups=np.array([0, 1, 2]),
       add_cam_debug_geo=False,
       use_rt=False,
       viz_gpu_hdls=None,
@@ -119,7 +120,7 @@ class BatchRenderer:
     mesh_vert_offsets = m.mesh_vertadr
     mesh_face_offsets = m.mesh_faceadr
     geom_types = m.geom_type
-    # TODO: filter geom groups
+    geom_groups = m.geom_group
     geom_data_ids = m.geom_dataid
     geom_sizes = jax.device_get(m.geom_size)
     geom_mat_ids = m.geom_matid
@@ -135,6 +136,7 @@ class BatchRenderer:
         mesh_vertex_offsets = mesh_vert_offsets,
         mesh_face_offsets = mesh_face_offsets,
         geom_types = geom_types,
+        geom_groups = geom_groups,
         geom_data_ids = geom_data_ids,
         geom_sizes = geom_sizes,
         geom_mat_ids = geom_mat_ids,
@@ -144,6 +146,7 @@ class BatchRenderer:
         num_worlds = num_worlds,
         batch_render_view_width = batch_render_view_width,
         batch_render_view_height = batch_render_view_height,
+        enabled_geom_groups = enabled_geom_groups,
         add_cam_debug_geo=add_cam_debug_geo,
         use_rt=use_rt,
         visualizer_gpu_handles = viz_gpu_hdls,

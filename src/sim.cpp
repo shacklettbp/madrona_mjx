@@ -124,6 +124,8 @@ Sim::Sim(Engine &ctx,
     RenderingSystem::init(ctx, cfg.renderBridge);
 
     for (CountT geom_idx = 0; geom_idx < (CountT)cfg.numGeoms; geom_idx++) {
+        if(cfg.geomDataIDs[geom_idx] == -1) continue;
+
         Entity instance = ctx.makeRenderableEntity<RenderEntity>();
         ctx.get<Position>(instance) = Vector3::zero();
         ctx.get<Rotation>(instance) = Quat { 1, 0, 0, 0 };

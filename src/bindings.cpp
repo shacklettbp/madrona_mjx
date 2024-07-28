@@ -33,6 +33,8 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
             nb::ndarray<const int32_t, nb::shape<-1>,
                 nb::device::cpu> geom_types,
             nb::ndarray<const int32_t, nb::shape<-1>,
+                nb::device::cpu> geom_groups,
+            nb::ndarray<const int32_t, nb::shape<-1>,
                 nb::device::cpu> geom_data_ids,
             nb::ndarray<const float, nb::shape<-1, 3>,
                 nb::device::cpu> geom_sizes,
@@ -46,6 +48,8 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
             int64_t num_worlds,
             int64_t batch_render_view_width,
             int64_t batch_render_view_height,
+            nb::ndarray<const int32_t, nb::shape<-1>,
+                nb::device::cpu> enabled_geom_groups,
             bool add_cam_debug_geo,
             bool use_rt,
             VisualizerGPUHandles *viz_gpu_hdls)
@@ -63,14 +67,17 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
             MJXModel mjx_model {
                 .meshGeo = mesh_geo,
                 .geomTypes = (int32_t *)geom_types.data(),
+                .geomGroups = (int32_t *)geom_groups.data(),
                 .geomDataIDs = (int32_t *)geom_data_ids.data(),
                 .geomMatIDs = (int32_t *)geom_mat_ids.data(),
+                .enabledGeomGroups = (int32_t *)enabled_geom_groups.data(),
                 .geomSizes = (math::Vector3 *)geom_sizes.data(),
                 .geomRGBA = (math::Vector4 *)geom_rgba.data(),
                 .matRGBA = (math::Vector4 *)mat_rgba.data(),
                 .numGeoms = (uint32_t)geom_types.shape(0),
                 .numMats = (uint32_t)mat_rgba.shape(0),
                 .numCams = (uint32_t)num_cams,
+                .numEnabledGeomGroups = (uint32_t)enabled_geom_groups.shape(0),
             };
 
             new (self) Manager(Manager::Config {
@@ -88,6 +95,7 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
            nb::arg("mesh_vertex_offsets"),
            nb::arg("mesh_face_offsets"),
            nb::arg("geom_types"),
+           nb::arg("geom_groups"),
            nb::arg("geom_data_ids"),
            nb::arg("geom_sizes"),
            nb::arg("geom_mat_ids"),
@@ -97,6 +105,7 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
            nb::arg("num_worlds"),
            nb::arg("batch_render_view_width"),
            nb::arg("batch_render_view_height"),
+           nb::arg("enabled_geom_groups"),
            nb::arg("add_cam_debug_geo") = false,
            nb::arg("use_rt") = false,
            nb::arg("visualizer_gpu_handles") = nb::none(),
