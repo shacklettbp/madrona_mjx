@@ -124,7 +124,6 @@ Sim::Sim(Engine &ctx,
     RenderingSystem::init(ctx, cfg.renderBridge);
 
     for (CountT geom_idx = 0; geom_idx < (CountT)cfg.numGeoms; geom_idx++) {
-        if(cfg.geomDataIDs[geom_idx] == -1) continue;
 
         Entity instance = ctx.makeRenderableEntity<RenderEntity>();
         ctx.get<Position>(instance) = Vector3::zero();
@@ -133,12 +132,10 @@ Sim::Sim(Engine &ctx,
         Diag3x3 scale;
         switch ((MJXGeomType)cfg.geomTypes[geom_idx]) {
         case MJXGeomType::Plane: {
-            // FIXME
-            float plane_scale = cfg.geomSizes[geom_idx].z;
-            scale.d0 = plane_scale;
-            scale.d1 = plane_scale;
-            scale.d2 = plane_scale;
-            scale = { 0, 0, 0 }; // Hack
+            Vector3 geom_size = cfg.geomSizes[geom_idx];
+            scale.d0 = geom_size.x;
+            scale.d1 = geom_size.y;
+            scale.d2 = 1;
         } break;
         case MJXGeomType::Sphere: {
             float sphere_scale = cfg.geomSizes[geom_idx].x;
