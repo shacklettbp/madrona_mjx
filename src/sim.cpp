@@ -157,12 +157,17 @@ Sim::Sim(Engine &ctx,
             scale.d1 = geom_size.y;
             scale.d2 = geom_size.z;
         } break;
+        case MJXGeomType::Cylinder: {
+            Vector3 geom_size = cfg.geomSizes[geom_idx];
+            scale.d0 = geom_size.x;
+            scale.d1 = geom_size.x;
+            scale.d2 = geom_size.y;
+        } break;
         case MJXGeomType::Mesh: {
             scale = Diag3x3 { 1, 1, 1 };
         } break;
         case MJXGeomType::Heightfield:
         case MJXGeomType::Ellipsoid:
-        case MJXGeomType::Cylinder:
             assert(false);
             break;
         default: {
