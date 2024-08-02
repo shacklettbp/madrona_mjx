@@ -354,6 +354,8 @@ static RTAssets loadRenderObjects(
         (std::filesystem::path(DATA_DIR) / "sphere.obj").string();
     render_asset_paths[(size_t)RenderPrimObjectIDs::Box] =
         (std::filesystem::path(DATA_DIR) / "box.obj").string();
+    render_asset_paths[(size_t)RenderPrimObjectIDs::Cylinder] =
+        (std::filesystem::path(DATA_DIR) / "cylinder.obj").string();
 
     std::array<const char *, render_asset_paths.size()> render_asset_cstrs;
     for (size_t i = 0; i < render_asset_paths.size(); i++) {
@@ -370,7 +372,8 @@ static RTAssets loadRenderObjects(
         FATAL("Failed to load render assets from disk: %s", import_err);
     }
 
-    HeapArray<SourceMesh> meshes(model.meshGeo.numMeshes);
+    HeapArray<SourceMesh> meshes(
+        model.meshGeo.numMeshes + disk_render_assets->objects.size());
     const CountT num_meshes = (CountT)model.meshGeo.numMeshes;
     
     for (CountT mesh_idx = 0; mesh_idx < num_meshes; mesh_idx++) {
@@ -398,6 +401,10 @@ static RTAssets loadRenderObjects(
             .numFaces = mesh_num_tris,
             .materialIDX = 0,
         };
+    }
+
+    for (CountT i = 0; i < disk_render_assets->objects.size(); i++) {
+        meshes[num_meshes + i] = disk_render_assets->objects[i].meshes[0];
     }
 
     std::vector<imp::SourceMaterial> materials;
@@ -441,36 +448,55 @@ static RTAssets loadRenderObjects(
     }
 
     HeapArray<SourceObject> objs(model.numGeoms + 1);
+
+    // Create a new mesh for each geom to avoid geoms that share the same mesh
+    // from pointing to the same source mesh
+    HeapArray<SourceMesh> dest_meshes(model.numGeoms + 1);
     
     for (CountT i = 0; i < model.numGeoms; i++) {
+        int source_mesh_idx = 0;
         switch ((MJXGeomType)model.geomTypes[i]) {
         case MJXGeomType::Plane: {
-            objs[i] = disk_render_assets->objects[(int)RenderPrimObjectIDs::Plane];
+            source_mesh_idx = num_meshes + (int)RenderPrimObjectIDs::Plane;
         } break;
         case MJXGeomType::Sphere: {
-            objs[i] = disk_render_assets->objects[(int)RenderPrimObjectIDs::Sphere]; 
+            source_mesh_idx = num_meshes + (int)RenderPrimObjectIDs::Sphere;
         } break;
         case MJXGeomType::Capsule: {
-            objs[i] = disk_render_assets->objects[(int)RenderPrimObjectIDs::Sphere]; 
+            source_mesh_idx = num_meshes + (int)RenderPrimObjectIDs::Sphere;
         } break;
         case MJXGeomType::Box: {
-            objs[i] = disk_render_assets->objects[(int)RenderPrimObjectIDs::Box]; 
+            source_mesh_idx = num_meshes + (int)RenderPrimObjectIDs::Box;
+        } break;
+        case MJXGeomType::Cylinder: {
+            source_mesh_idx = num_meshes + (int)RenderPrimObjectIDs::Cylinder;
         } break;
         case MJXGeomType::Mesh: {
-            objs[i] = {
-                .meshes = Span<SourceMesh>(&meshes[model.geomDataIDs[i]], 1)};
+            source_mesh_idx = model.geomDataIDs[i];
         } break;
         case MJXGeomType::Heightfield:
         case MJXGeomType::Ellipsoid:
-        case MJXGeomType::Cylinder:
         default:
             FATAL("Unsupported geom type");
             break;
         }
+        const SourceMesh& source_mesh = meshes[source_mesh_idx];
+        dest_meshes[i] = {
+            .positions = source_mesh.positions,
+            .normals = source_mesh.normals,
+            .tangentAndSigns = source_mesh.tangentAndSigns,
+            .uvs = source_mesh.uvs,
+            .indices = source_mesh.indices,
+            .faceCounts = source_mesh.faceCounts,
+            .faceMaterials = source_mesh.faceMaterials,
+            .numVertices = source_mesh.numVertices,
+            .numFaces = source_mesh.numFaces,
+            .materialIDX = static_cast<uint32_t>(model.geomMatIDs[i]),
+        };
 
-        for (auto &mesh : objs[i].meshes) {
-            mesh.materialIDX = model.geomMatIDs[i];
-        }
+        objs[i] = {
+            .meshes = Span<SourceMesh>(&dest_meshes[i], 1),
+        };
 
         model.geomDataIDs[i] = -1;
         for (CountT geom_i = 0; geom_i < model.numEnabledGeomGroups; geom_i++)
