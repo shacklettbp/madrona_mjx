@@ -43,24 +43,9 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
 
     if (cfg.useRT) {
         registry.exportColumn<render::RaycastOutputArchetype, 
-            render::RenderOutputBuffer>((uint32_t)ExportID::RaycastDepth);
+            render::DepthOutputBuffer>((uint32_t)ExportID::RaycastDepth);
     }
 }
-
-#if 0
-inline void printTransforms(Engine &ctx,
-                            Position &pos,
-                            Rotation &rot,
-                            Scale &scale,
-                            ObjectID &obj_id)
-{
-    printf("(%f %f %f) (%f %f %f %f) (%f %f %f) %d\n",
-        pos.x, pos.y, pos.z,
-        rot.w, rot.x, rot.y, rot.z,
-        scale.d0, scale.d1, scale.d2,
-        obj_id.idx);
-}
-#endif
 
 static void setupRenderTasks(TaskGraphBuilder &builder,
                              Span<const TaskGraphNodeID> deps)
