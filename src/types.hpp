@@ -20,10 +20,23 @@ using madrona::base::ObjectID;
 using madrona::math::Vector3;
 using madrona::math::Quat;
 
-enum class MJXGeomType : uint32_t {
-    Plane = 0,
+enum class RenderPrimObjectIDs : uint32_t {
+    DebugCam = 0,
+    Plane = 1,
     Sphere = 2,
-    Mesh = 7,
+    Box = 3,
+    NumPrims,
+};
+
+enum class MJXGeomType : uint32_t {
+    Plane       = 0,
+    Heightfield = 1,
+    Sphere      = 2,
+    Capsule     = 3,
+    Ellipsoid   = 4,
+    Cylinder    = 5,
+    Box         = 6,
+    Mesh        = 7,
 };
 
 struct RenderEntity : public madrona::Archetype<
@@ -37,6 +50,12 @@ struct RenderEntity : public madrona::Archetype<
 struct CameraEntity : public madrona::Archetype<
     Position,
     Rotation,
+    madrona::render::RenderCamera
+> {};
+
+struct DebugCameraEntity : public madrona::Archetype<
+    ObjectInstance,
+    madrona::render::Renderable,
     madrona::render::RenderCamera
 > {};
 

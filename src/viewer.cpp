@@ -9,6 +9,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <imgui.h>
 
 using namespace madrona;
 using namespace madrona::viz;
@@ -41,6 +42,9 @@ struct VisualizerGPUState {
 
 struct Visualizer {
     Viewer viewer;
+    uint32_t numCams;
+    uint32_t batchViewWidth;
+    uint32_t batchViewHeight;
 
     inline Visualizer(VisualizerGPUState &gpu_state, Manager &mgr)
         : viewer(mgr.getRenderManager(), gpu_state.window.get(), {
@@ -49,7 +53,9 @@ struct Visualizer {
             .cameraMoveSpeed = 5.f,
             .cameraPosition = { 0, -3, 0 },
             .cameraRotation = { 1, 0, 0, 0 },
-        })
+        }), numCams(mgr.numCams()),
+            batchViewWidth(mgr.batchViewWidth()),
+            batchViewHeight(mgr.batchViewHeight())
     {}
 
     template <typename Fn>
@@ -71,7 +77,68 @@ struct Visualizer {
             (void)input;
         }, [&]() {
             sim_cb();
-        }, []() {});
+        }, [&]() {
+#ifdef MADRONA_CUDA_SUPPORT
+            uint32_t raycast_output_resolution = batchViewWidth;
+
+            unsigned char* print_ptr;
+            int64_t num_bytes = 4 * raycast_output_resolution * 
+                raycast_output_resolution;
+            print_ptr = (unsigned char*)cu::allocReadback(num_bytes);
+
+            char *raycast_tensor = (char *)(mgr.depthTensor().devicePtr());
+
+            uint32_t bytes_per_image = 4 * raycast_output_resolution * 
+                raycast_output_resolution;
+
+            uint32_t image_idx = viewer.getCurrentWorldID() * 
+                numCams + std::max(viewer.getCurrentViewID(), (CountT)0);
+
+            raycast_tensor += image_idx * bytes_per_image;
+
+            cudaMemcpy(print_ptr, raycast_tensor,
+                    bytes_per_image,
+                    cudaMemcpyDeviceToHost);
+            raycast_tensor = (char *)print_ptr;
+
+            ImGui::Begin("Depth Tensor Debug");
+
+            auto draw2 = ImGui::GetWindowDrawList();
+            ImVec2 windowPos = ImGui::GetWindowPos();
+            char *raycasters = raycast_tensor;
+
+            int vertOff = 70;
+
+            float pixScale = 5;
+            float pixSpace = 5;
+
+            for (int i = 0; i < (int)raycast_output_resolution; i++) {
+                for (int j = 0; j < (int)raycast_output_resolution; j++) {
+                    uint32_t linear_idx = 4 * (j + i * raycast_output_resolution);
+
+                    float *depth = (float *)(raycasters + linear_idx);
+
+                    // float depth_convert = std::max(0.0f, std::min(255.0f * (1.0f / (*depth)), 255.0f));
+                    float depth_convert = 255.0f * (*depth) / 4.f;
+                    depth_convert = std::min(255.f, std::max(0.f, depth_convert));
+
+                    auto realColor = IM_COL32(
+                            (uint8_t)depth_convert,
+                            (uint8_t)depth_convert,
+                            (uint8_t)depth_convert, 
+                            255);
+
+                    draw2->AddRectFilled(
+                        { (j * pixSpace) + windowPos.x, 
+                          (i * pixSpace) + windowPos.y +vertOff }, 
+                        { (j * pixSpace + pixScale) + windowPos.x,   
+                          (i * pixSpace + pixScale)+ +windowPos.y+vertOff },
+                        realColor, 0, 0);
+                }
+            }
+            ImGui::End();
+#endif
+           });
     }
 };
 
