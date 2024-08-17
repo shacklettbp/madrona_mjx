@@ -104,19 +104,22 @@ class AlohaBringToTarget(PipelineEnv):
 
     data = self.pipeline_step(state.pipeline_state, ctrl)
 
-    render_token, rgb, depth = self.renderer.render(state.info['render_token'], data)
-    state.info.update({'render_token': render_token, 'rgb': rgb, 'depth': depth})
+    _, rgb, depth = self.renderer.render(state.info['render_token'], data)
+
+    state.info.update({'rgb': rgb, 'depth': depth})
 
     target_pos = state.info['target_pos']
     box_pos = data.xpos[self._box_body_index]
 
     box_reward = jp.exp(-10 * jp.linalg.norm(target_pos - box_pos))
 
+
     left_gripper_pos = data.site_xpos[self._left_gripper_site_index]
     right_gripper_pos = data.site_xpos[self._right_gripper_site_index]
     left_reward = jp.exp(-10 * jp.linalg.norm(box_pos - left_gripper_pos))
     right_reward = jp.exp(-10 * jp.linalg.norm(box_pos - right_gripper_pos))
     gripper_reward = jp.maximum(left_reward, right_reward)
+
 
     gripper_open = data.act[6] + data.act[13]
 
@@ -128,6 +131,7 @@ class AlohaBringToTarget(PipelineEnv):
         box_reward=box_reward,
         out_of_bounds=out_of_bounds.astype(float))
     obs = self._get_obs(data, state.info)
+
     state = State(data, obs, reward, done, state.metrics, state.info)
 
     return state
