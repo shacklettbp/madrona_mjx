@@ -510,16 +510,6 @@ static RTAssets loadRenderObjects(
                 break;
             }
         }
-
-        model.geomDataIDs[i] = -1;
-        for (CountT geom_i = 0; geom_i < model.numEnabledGeomGroups; geom_i++)
-        {
-            if (model.geomGroups[i] == model.enabledGeomGroups[geom_i])
-            {
-                model.geomDataIDs[i] = i;
-                break;
-            }
-        }
     }
     
     objs[model.numGeoms] = disk_render_assets->objects[(int)RenderPrimObjectIDs::DebugCam];
