@@ -406,10 +406,6 @@ static RTAssets loadRenderObjects(
         };
     }
 
-    for (CountT i = 0; i < disk_render_assets->objects.size(); i++) {
-        meshes[num_meshes + i] = disk_render_assets->objects[i].meshes[0];
-    }
-
     std::vector<imp::SourceMaterial> materials;
     for (CountT i = 0; i < model.numMats; i++) {
         SourceMaterial mat = {
