@@ -374,6 +374,10 @@ static RTAssets loadRenderObjects(
     HeapArray<SourceMesh> meshes(
         model.meshGeo.numMeshes + disk_render_assets->objects.size());
     const CountT num_meshes = (CountT)model.meshGeo.numMeshes;
+
+    for (CountT i = 0; i < disk_render_assets->objects.size(); i++) {
+        meshes[i] = disk_render_assets->objects[i].meshes[0];
+    }
     
     for (CountT mesh_idx = 0; mesh_idx < num_meshes; mesh_idx++) {
         uint32_t mesh_vert_offset = model.meshGeo.vertexOffsets[mesh_idx];
@@ -388,7 +392,7 @@ static RTAssets loadRenderObjects(
         uint32_t mesh_num_tris = next_tri_offset - mesh_tri_offset;
         uint32_t mesh_idx_offset = mesh_tri_offset * 3;
 
-        meshes[mesh_idx] = {
+        meshes[mesh_idx + disk_render_assets->objects.size()] = {
             .positions = model.meshGeo.vertices + mesh_vert_offset,
             .normals = nullptr,
             .tangentAndSigns = nullptr,
@@ -400,10 +404,6 @@ static RTAssets loadRenderObjects(
             .numFaces = mesh_num_tris,
             .materialIDX = 0,
         };
-    }
-
-    for (CountT i = 0; i < disk_render_assets->objects.size(); i++) {
-        meshes[num_meshes + i] = disk_render_assets->objects[i].meshes[0];
     }
 
     std::vector<imp::SourceMaterial> materials;
@@ -456,22 +456,22 @@ static RTAssets loadRenderObjects(
         int source_mesh_idx = 0;
         switch ((MJXGeomType)model.geomTypes[i]) {
         case MJXGeomType::Plane: {
-            source_mesh_idx = num_meshes + (int)RenderPrimObjectIDs::Plane;
+            source_mesh_idx = (int)RenderPrimObjectIDs::Plane;
         } break;
         case MJXGeomType::Sphere: {
-            source_mesh_idx = num_meshes + (int)RenderPrimObjectIDs::Sphere;
+            source_mesh_idx = (int)RenderPrimObjectIDs::Sphere;
         } break;
         case MJXGeomType::Capsule: {
-            source_mesh_idx = num_meshes + (int)RenderPrimObjectIDs::Sphere;
+            source_mesh_idx = (int)RenderPrimObjectIDs::Sphere;
         } break;
         case MJXGeomType::Box: {
-            source_mesh_idx = num_meshes + (int)RenderPrimObjectIDs::Box;
+            source_mesh_idx = (int)RenderPrimObjectIDs::Box;
         } break;
         case MJXGeomType::Cylinder: {
-            source_mesh_idx = num_meshes + (int)RenderPrimObjectIDs::Cylinder;
+            source_mesh_idx = (int)RenderPrimObjectIDs::Cylinder;
         } break;
         case MJXGeomType::Mesh: {
-            source_mesh_idx = model.geomDataIDs[i];
+            source_mesh_idx = (int)RenderPrimObjectIDs::NumPrims + model.geomDataIDs[i];
         } break;
         case MJXGeomType::Heightfield:
         case MJXGeomType::Ellipsoid:
@@ -497,16 +497,15 @@ static RTAssets loadRenderObjects(
             .meshes = Span<SourceMesh>(&dest_meshes[i], 1),
         };
 
-        // model.geomDataIDs[i] = -1;
-        // for (CountT geom_i = 0; geom_i < model.numEnabledGeomGroups; geom_i++)
-        // {
-        //     if (model.geomGroups[i] == model.enabledGeomGroups[geom_i])
-        //     {
-        //         model.geomDataIDs[i] = i;
-        //         break;
-        //     }
-        // }
-        model.geomDataIDs[i] = i;
+        model.geomDataIDs[i] = -1;
+        for (CountT geom_i = 0; geom_i < model.numEnabledGeomGroups; geom_i++)
+        {
+            if (model.geomGroups[i] == model.enabledGeomGroups[geom_i])
+            {
+                model.geomDataIDs[i] = i;
+                break;
+            }
+        }
     }
     
     objs[model.numGeoms] = disk_render_assets->objects[(int)RenderPrimObjectIDs::DebugCam];

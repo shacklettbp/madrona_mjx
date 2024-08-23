@@ -161,8 +161,15 @@ Sim::Sim(Engine &ctx,
             assert(false);
         } break;
         }
+
+        if (cfg.geomDataIDs[geom_idx] == -1) {
+            ctx.get<ObjectID>(instance) = ObjectID {0};
+            scale = Diag3x3 { 0, 0, 0 };
+        } 
+        else {
+            ctx.get<ObjectID>(instance) = ObjectID { cfg.geomDataIDs[geom_idx] };
+        }
         ctx.get<Scale>(instance) = scale;
-        ctx.get<ObjectID>(instance) = ObjectID { cfg.geomDataIDs[geom_idx] };
     }
 
     for (CountT cam_idx = 0; cam_idx < (CountT)cfg.numCams; cam_idx++) {
