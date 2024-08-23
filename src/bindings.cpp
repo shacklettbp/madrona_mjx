@@ -109,7 +109,7 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
            nb::arg("add_cam_debug_geo") = false,
            nb::arg("use_rt") = false,
            nb::arg("visualizer_gpu_handles") = nb::none(),
-           nb::keep_alive<1, 19>())
+           nb::keep_alive<1, 20>())
         .def("init", [](Manager &mgr,
                         nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_pos,
                         nb::ndarray<const float, nb::shape<-1, -1, 4>> geom_rot,
