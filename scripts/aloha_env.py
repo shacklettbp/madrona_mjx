@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jp
+import numpy as np
 import mujoco
 
 from typing import Optional, Any, List, Sequence, Dict, Tuple, Union, Callable
@@ -66,7 +67,7 @@ class AlohaBringToTarget(PipelineEnv):
 
     # Madrona renderer
     self.renderer = BatchRenderer(sys, gpu_id, render_batch_size, 
-                                  width, height, add_cam_debug_geo,
+                                  width, height, np.array([0, 1, 2]), add_cam_debug_geo,
                                   use_rt,
                                   render_viz_gpu_hdls)
 
@@ -104,8 +105,8 @@ class AlohaBringToTarget(PipelineEnv):
 
     data = self.pipeline_step(state.pipeline_state, ctrl)
 
-    render_token, rgb, depth = self.renderer.render(state.info['render_token'], data)
-    state.info.update({'render_token': render_token, 'rgb': rgb, 'depth': depth})
+    _, rgb, depth = self.renderer.render(state.info['render_token'], data)
+    state.info.update({'rgb': rgb, 'depth': depth})
 
     target_pos = state.info['target_pos']
     box_pos = data.xpos[self._box_body_index]

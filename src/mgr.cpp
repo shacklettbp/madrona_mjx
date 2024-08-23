@@ -244,8 +244,7 @@ struct Manager::Impl {
     inline const uint8_t * getRGBOut() const
     {
         if (cfg.useRT) {
-            FATAL("No RGB from raytracing support currently");
-            return nullptr;
+            return (uint8_t *)gpuExec.getExported((uint32_t)ExportID::RaycastRGB);
         } else {
             return renderMgr->batchRendererRGBOut();
         }
@@ -414,8 +413,8 @@ static RTAssets loadRenderObjects(
                 model.matRGBA[i].x, model.matRGBA[i].y,
                 model.matRGBA[i].z, model.matRGBA[i].w},
             .textureIdx = -1,
-            .roughness = 0.8f,
-            .metalness = 0.2f};
+            .roughness = 0.0f,
+            .metalness = 0.0f};
         materials.push_back(mat);
     }
 
@@ -498,15 +497,16 @@ static RTAssets loadRenderObjects(
             .meshes = Span<SourceMesh>(&dest_meshes[i], 1),
         };
 
-        model.geomDataIDs[i] = -1;
-        for (CountT geom_i = 0; geom_i < model.numEnabledGeomGroups; geom_i++)
-        {
-            if (model.geomGroups[i] == model.enabledGeomGroups[geom_i])
-            {
-                model.geomDataIDs[i] = i;
-                break;
-            }
-        }
+        // model.geomDataIDs[i] = -1;
+        // for (CountT geom_i = 0; geom_i < model.numEnabledGeomGroups; geom_i++)
+        // {
+        //     if (model.geomGroups[i] == model.enabledGeomGroups[geom_i])
+        //     {
+        //         model.geomDataIDs[i] = i;
+        //         break;
+        //     }
+        // }
+        model.geomDataIDs[i] = i;
     }
     
     objs[model.numGeoms] = disk_render_assets->objects[(int)RenderPrimObjectIDs::DebugCam];
@@ -595,7 +595,7 @@ Manager::Impl * Manager::Impl::make(
         Optional<CudaBatchRenderConfig>::none();
     if (use_rt) {
         render_cfg = {
-            .renderMode = CudaBatchRenderConfig::RenderMode::Depth,
+            .renderMode = CudaBatchRenderConfig::RenderMode::RGBD,
             .geoBVHData = rt_assets.bvhData,
             .materialData = rt_assets.matData,
             .renderResolution = mgr_cfg.batchRenderViewWidth,
