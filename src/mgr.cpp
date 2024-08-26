@@ -724,9 +724,7 @@ Tensor Manager::cameraRotationsTensor() const
 
 Tensor Manager::rgbTensor() const
 {
-    FATAL("No RGB support currently");
-#if 0
-    const uint8_t *rgb_ptr = impl_->renderMgr->batchRendererRGBOut();
+    const uint8_t *rgb_ptr = impl_->getRGBOut();
 
     return Tensor((void*)rgb_ptr, TensorElementType::UInt8, {
         impl_->cfg.numWorlds,
@@ -735,7 +733,6 @@ Tensor Manager::rgbTensor() const
         impl_->cfg.batchRenderViewWidth,
         4,
     }, impl_->cfg.gpuID);
-#endif
 }
 
 Tensor Manager::depthTensor() const
