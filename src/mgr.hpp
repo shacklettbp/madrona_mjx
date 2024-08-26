@@ -39,9 +39,12 @@ struct MJXModel {
     madrona::math::Vector3 *geomSizes;
     madrona::math::Vector4 *geomRGBA;
     madrona::math::Vector4 *matRGBA;
+    madrona::math::Vector3 *lightPos;
+    madrona::math::Vector3 *lightDir;
     uint32_t numGeoms;
     uint32_t numMats;
     uint32_t numCams;
+    uint32_t numLights;
     uint32_t numEnabledGeomGroups;
 };
 

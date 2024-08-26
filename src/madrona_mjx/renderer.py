@@ -126,6 +126,8 @@ class BatchRenderer:
     geom_mat_ids = m.geom_matid
     geom_rgba = m.geom_rgba
     mat_rgba = m.mat_rgba
+    light_pos = m.light_pos
+    light_dir = m.light_dir
     # TODO: filter for camera ids
     num_cams = m.ncam
 
@@ -142,6 +144,8 @@ class BatchRenderer:
         geom_mat_ids = geom_mat_ids,
         geom_rgba = geom_rgba,
         mat_rgba = mat_rgba,
+        light_pos = light_pos,
+        light_dir = light_dir,
         num_cams = num_cams,
         num_worlds = num_worlds,
         batch_render_view_width = batch_render_view_width,

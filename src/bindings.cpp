@@ -44,6 +44,10 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
                 nb::device::cpu> geom_rgba,
             nb::ndarray<const float, nb::shape<-1, 4>,
                 nb::device::cpu> mat_rgba,
+            nb::ndarray<const float, nb::shape<-1, 3>,
+                nb::device::cpu> light_pos,
+            nb::ndarray<const float, nb::shape<-1, 3>,
+                nb::device::cpu> light_dir,
             int64_t num_cams,
             int64_t num_worlds,
             int64_t batch_render_view_width,
@@ -74,9 +78,12 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
                 .geomSizes = (math::Vector3 *)geom_sizes.data(),
                 .geomRGBA = (math::Vector4 *)geom_rgba.data(),
                 .matRGBA = (math::Vector4 *)mat_rgba.data(),
+                .lightPos = (math::Vector3 *)light_pos.data(),
+                .lightDir = (math::Vector3 *)light_dir.data(),
                 .numGeoms = (uint32_t)geom_types.shape(0),
                 .numMats = (uint32_t)mat_rgba.shape(0),
                 .numCams = (uint32_t)num_cams,
+                .numLights = (uint32_t)light_pos.shape(0),
                 .numEnabledGeomGroups = (uint32_t)enabled_geom_groups.shape(0),
             };
 
@@ -101,6 +108,8 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
            nb::arg("geom_mat_ids"),
            nb::arg("geom_rgba"),
            nb::arg("mat_rgba"),
+           nb::arg("light_pos"),
+           nb::arg("light_dir"),
            nb::arg("num_cams"),
            nb::arg("num_worlds"),
            nb::arg("batch_render_view_width"),
@@ -109,7 +118,7 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
            nb::arg("add_cam_debug_geo") = false,
            nb::arg("use_rt") = false,
            nb::arg("visualizer_gpu_handles") = nb::none(),
-           nb::keep_alive<1, 20>())
+           nb::keep_alive<1, 23>())
         .def("init", [](Manager &mgr,
                         nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_pos,
                         nb::ndarray<const float, nb::shape<-1, -1, 4>> geom_rot,
