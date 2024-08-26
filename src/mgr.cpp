@@ -516,9 +516,14 @@ static RTAssets loadRenderObjects(
     if (render_mgr.has_value()) {
         render_mgr->loadObjects(objs, materials, {});
 
-        render_mgr->configureLighting({
-            { true, math::Vector3{1.0f, 1.0f, -2.0f}, math::Vector3{1.0f, 1.0f, 1.0f} }
-        });
+        // Lighting is currently limited to directional lights only
+        std::vector<render::LightConfig> lights;
+        for (CountT i = 0; i < model.numLights; i++) {
+            lights.push_back({
+                true, model.lightDir[i], math::Vector3{1.0f, 1.0f, 1.0f}
+            });
+        }
+        render_mgr->configureLighting(lights);
     }
 
     if (use_rt) {
