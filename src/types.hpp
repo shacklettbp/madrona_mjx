@@ -26,6 +26,7 @@ enum class RenderPrimObjectIDs : uint32_t {
     Sphere = 2,
     Box = 3,
     Cylinder = 4,
+    Capsule = 5,
     NumPrims,
 };
 

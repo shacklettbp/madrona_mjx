@@ -355,6 +355,8 @@ static RTAssets loadRenderObjects(
         (std::filesystem::path(DATA_DIR) / "box.obj").string();
     render_asset_paths[(size_t)RenderPrimObjectIDs::Cylinder] =
         (std::filesystem::path(DATA_DIR) / "cylinder.obj").string();
+    render_asset_paths[(size_t)RenderPrimObjectIDs::Capsule] =
+        (std::filesystem::path(DATA_DIR) / "capsule.obj").string();
 
     std::array<const char *, render_asset_paths.size()> render_asset_cstrs;
     for (size_t i = 0; i < render_asset_paths.size(); i++) {
@@ -462,7 +464,7 @@ static RTAssets loadRenderObjects(
             source_mesh_idx = (int)RenderPrimObjectIDs::Sphere;
         } break;
         case MJXGeomType::Capsule: {
-            source_mesh_idx = (int)RenderPrimObjectIDs::Sphere;
+            source_mesh_idx = (int)RenderPrimObjectIDs::Capsule;
         } break;
         case MJXGeomType::Box: {
             source_mesh_idx = (int)RenderPrimObjectIDs::Box;
