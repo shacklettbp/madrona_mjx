@@ -125,18 +125,16 @@ Sim::Sim(Engine &ctx,
             scale.d2 = 1;
         } break;
         case MJXGeomType::Sphere: {
-            float sphere_scale = cfg.geomSizes[geom_idx].x;
-            scale.d0 = sphere_scale;
-            scale.d1 = sphere_scale;
-            scale.d2 = sphere_scale;
-            scale = { 0, 0, 0 }; // Hack
+            Vector3 geom_size = cfg.geomSizes[geom_idx];
+            scale.d0 = geom_size.x;
+            scale.d1 = geom_size.x;
+            scale.d2 = geom_size.x;
         } break;
         case MJXGeomType::Capsule: {
             Vector3 geom_size = cfg.geomSizes[geom_idx];
             scale.d0 = geom_size.x;
-            scale.d1 = geom_size.y;
-            scale.d2 = geom_size.z;
-            scale = { 0, 0, 0 }; // Hack
+            scale.d1 = geom_size.x;
+            scale.d2 = geom_size.y;
         } break;
         case MJXGeomType::Box: {
             Vector3 geom_size = cfg.geomSizes[geom_idx];
