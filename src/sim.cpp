@@ -138,9 +138,9 @@ Sim::Sim(Engine &ctx,
         } break;
         case MJXGeomType::Box: {
             Vector3 geom_size = cfg.geomSizes[geom_idx];
-            scale.d0 = geom_size.x;
-            scale.d1 = geom_size.y;
-            scale.d2 = geom_size.z;
+            scale.d0 = geom_size.x * 2;
+            scale.d1 = geom_size.y * 2;
+            scale.d2 = geom_size.z * 2;
         } break;
         case MJXGeomType::Cylinder: {
             Vector3 geom_size = cfg.geomSizes[geom_idx];
