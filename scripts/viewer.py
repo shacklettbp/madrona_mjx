@@ -1,47 +1,84 @@
+import os
 import jax
-from jax import random, numpy as jp
+import jax.numpy as jp
+import numpy as np
+import mujoco
+from mujoco import mjx
+from etils import epath
 
-from madrona_mjx import BatchRenderer 
+from madrona_mjx.renderer import BatchRenderer
 from madrona_mjx.viz import VisualizerGPUState, Visualizer
 
 import argparse
 
-from mjx_env import MJXEnvAndPolicy
-
 arg_parser = argparse.ArgumentParser()
+arg_parser.add_argument('--mjcf', type=str, required=True)
 arg_parser.add_argument('--gpu-id', type=int, default=0)
 arg_parser.add_argument('--num-worlds', type=int, required=True)
 arg_parser.add_argument('--window-width', type=int, required=True)
 arg_parser.add_argument('--window-height', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-width', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-height', type=int, required=True)
+arg_parser.add_argument('--add-cam-debug-geo', action='store_true')
+arg_parser.add_argument('--use-raytracer', action='store_true')
 
 args = arg_parser.parse_args()
 
-viz_gpu_state = VisualizerGPUState(args.window_width, args.window_height, args.gpu_id)
+viz_gpu_state = VisualizerGPUState(
+  args.window_width, args.window_height, args.gpu_id)
 
-mjx_wrapper = MJXEnvAndPolicy.create(random.key(0), args.num_worlds)
+def load_model(path: str):
+  path = epath.Path(path)
+  xml = path.read_text()
+  assets = {}
+  for f in path.parent.glob('*.xml'):
+    assets[f.name] = f.read_bytes()
+    for f in (path.parent / 'assets').glob('*'):
+      assets[f.name] = f.read_bytes()
+  model = mujoco.MjModel.from_xml_string(xml, assets)
+  return model
 
-renderer = BatchRenderer.create(
-    mjx_wrapper.env, mjx_wrapper.mjx_state, args.gpu_id, args.num_worlds,
-    args.batch_render_view_width, args.batch_render_view_height,
-    False, viz_gpu_state.get_gpu_handles())
+def limit_jax_mem(limit):
+    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = f"{limit:.2f}"
+limit_jax_mem(0.05)
 
-@jax.jit
-def wrapper_step(mjx_wrapper):
-  return mjx_wrapper.step()
+# Tell XLA to use Triton GEMM
+xla_flags = os.environ.get('XLA_FLAGS', '')
+xla_flags += ' --xla_gpu_triton_gemm_any=True'
+os.environ['XLA_FLAGS'] = xla_flags
 
-def step_fn(carry):
-  mjx_wrapper, renderer = carry
+if __name__ == '__main__':
+  
+  model = load_model(args.mjcf)
+  print(model.ntexdata)
+  mjx_model = mjx.put_model(model, _full_compat=True)
 
-  mjx_wrapper = wrapper_step(mjx_wrapper)
+  renderer = BatchRenderer(
+    mjx_model, args.gpu_id, args.num_worlds, 
+    args.batch_render_view_width, args.batch_render_view_width,
+    np.array([0, 1, 2]), args.add_cam_debug_geo, args.use_raytracer,
+    viz_gpu_state.get_gpu_handles())
 
-  renderer, rgb, depth = renderer.render(mjx_wrapper.mjx_state)
-  return mjx_wrapper, renderer
+  def init(rng):
+    mjx_data = mjx.make_data(mjx_model)
+    mjx_data.replace(qpos=0.01 * jax.random.uniform(rng, shape=(mjx_model.nq,)))
+    mjx_data = mjx.forward(mjx_model, mjx_data)
+    render_token, rgb, depth = renderer.init(mjx_data)
+    return mjx_data, render_token
 
-step_fn = jax.jit(step_fn)
-step_fn = step_fn.lower((mjx_wrapper, renderer))
-step_fn = step_fn.compile()
+  init_fn = jax.jit(jax.vmap(init))
 
-visualizer = Visualizer(viz_gpu_state, renderer.madrona)
-visualizer.loop(renderer.madrona, step_fn, (mjx_wrapper, renderer))
+  rng = jax.random.PRNGKey(seed=2)
+  rng, *key = jax.random.split(rng, args.num_worlds + 1)
+  mjx_data, rtkn = init_fn(jp.array(key))
+
+  def step(carry):
+    data, render_token = carry
+    data = mjx.step(mjx_model, data)
+    _, rgb, depth = renderer.render(render_token, data)
+    return (data, render_token)
+
+  step_fn = jax.jit(jax.vmap(step))
+
+  visualizer = Visualizer(viz_gpu_state, renderer.madrona)
+  visualizer.loop(renderer.madrona, step_fn, (mjx_data, rtkn))
