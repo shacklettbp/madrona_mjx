@@ -129,14 +129,15 @@ class BatchRenderer:
     geom_mat_ids = m.geom_matid
     geom_rgba = m.geom_rgba
     mat_rgba = m.mat_rgba
-    light_pos = m.light_pos
-    light_dir = m.light_dir
+    light_mode = m.light_mode
+    light_isdir = m.light_directional
+    light_pos = m.light_pos0
+    light_dir = m.light_dir0
     # TODO: filter for camera ids
     num_cams = m.ncam
 
     mat_tex_ids = m.mat_texid
     tex_data = m.tex_data
-  
     # add 255 every third element to create 4 channel rgba texture
     tex_data = np.insert(tex_data, np.arange(3, tex_data.shape[0], 3), 255, axis=0)
     tex_offsets = m.tex_adr
@@ -166,6 +167,8 @@ class BatchRenderer:
         tex_widths = tex_widths,
         tex_heights = tex_heights,
         tex_nchans = tex_nchans,
+        light_mode = light_mode,
+        light_isdir = light_isdir,
         light_pos = light_pos,
         light_dir = light_dir,
         num_cams = num_cams,

@@ -546,12 +546,21 @@ static RTAssets loadRenderObjects(
     if (render_mgr.has_value()) {
         render_mgr->loadObjects(objs, materials, imported_textures);
 
-        // Lighting is currently limited to directional lights only
         std::vector<render::LightConfig> lights;
         for (CountT i = 0; i < model.numLights; i++) {
-            lights.push_back({
-                true, model.lightDir[i], math::Vector3{1.0f, 1.0f, 1.0f}
-            });
+            // Currently only supporting fixed lights
+            if (model.lightMode[i] != 0) continue;
+            
+            if (model.lightIsDir[i]) {
+                lights.push_back({
+                    true, model.lightDir[i], math::Vector3{1.0f, 1.0f, 1.0f}
+                });
+            } else {
+                // Point lights currently not supported, defaulting to directional
+                lights.push_back({
+                    true, model.lightDir[i], math::Vector3{1.0f, 1.0f, 1.0f}
+                });
+            }
         }
         render_mgr->configureLighting(lights);
     }

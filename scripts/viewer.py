@@ -50,7 +50,6 @@ os.environ['XLA_FLAGS'] = xla_flags
 if __name__ == '__main__':
   
   model = load_model(args.mjcf)
-  print(model.ntexdata)
   mjx_model = mjx.put_model(model, _full_compat=True)
 
   renderer = BatchRenderer(
