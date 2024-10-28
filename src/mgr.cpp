@@ -343,6 +343,8 @@ static RTAssets loadRenderObjects(
 {
     using namespace imp;
 
+    StackAlloc tmp_alloc;
+
     std::array<std::string, (size_t)RenderPrimObjectIDs::NumPrims> 
         render_asset_paths;
     render_asset_paths[(size_t)RenderPrimObjectIDs::DebugCam] =
@@ -394,11 +396,19 @@ static RTAssets loadRenderObjects(
         uint32_t mesh_num_tris = next_tri_offset - mesh_tri_offset;
         uint32_t mesh_idx_offset = mesh_tri_offset * 3;
 
+        
+        math::Vector2 *uvs;
+        if (model.meshGeo.texCoordOffsets[mesh_idx] != -1) {
+            uvs = model.meshGeo.texCoords + model.meshGeo.texCoordOffsets[mesh_idx];
+        } else {
+            uvs = nullptr;
+        }
+
         meshes[mesh_idx + disk_render_assets->objects.size()] = {
             .positions = model.meshGeo.vertices + mesh_vert_offset,
             .normals = nullptr,
             .tangentAndSigns = nullptr,
-            .uvs = nullptr,
+            .uvs = uvs,
             .indices = model.meshGeo.indices + mesh_idx_offset,
             .faceCounts = nullptr,
             .faceMaterials = nullptr,
@@ -408,13 +418,31 @@ static RTAssets loadRenderObjects(
         };
     }
 
+    SourceTexture *out_textures = tmp_alloc.allocN<SourceTexture>(model.numTextures);
+
+    for (CountT i = 0; i < model.numTextures; i++) {
+        // Calculate the correct texture offset since we added a 4th channel
+        uint32_t tex_offset = model.texOffsets[i] + (model.texOffsets[i] / 3);
+        Optional<SourceTexture> tex = SourceTexture {
+            .data = &model.texData[tex_offset],
+            .format = SourceTextureFormat::R8G8B8A8,
+            .width = (uint32_t)model.texWidths[i],
+            .height = (uint32_t)model.texHeights[i],
+            .numBytes = (size_t)(model.texWidths[i] * model.texHeights[i] * 4),
+        };
+        out_textures[i] = *tex;
+    }
+
+    Span<imp::SourceTexture> imported_textures = Span(out_textures, model.numTextures);
+
     std::vector<imp::SourceMaterial> materials;
     for (CountT i = 0; i < model.numMats; i++) {
+        int32_t tex_idx = model.matTexIDs[(i * 10) + 1];
         SourceMaterial mat = {
             .color = math::Vector4{
                 model.matRGBA[i].x, model.matRGBA[i].y,
                 model.matRGBA[i].z, model.matRGBA[i].w},
-            .textureIdx = -1,
+            .textureIdx = tex_idx,
             .roughness = 0.0f,
             .metalness = 0.0f};
         materials.push_back(mat);
@@ -516,7 +544,7 @@ static RTAssets loadRenderObjects(
     }
 
     if (render_mgr.has_value()) {
-        render_mgr->loadObjects(objs, materials, {});
+        render_mgr->loadObjects(objs, materials, imported_textures);
 
         // Lighting is currently limited to directional lights only
         std::vector<render::LightConfig> lights;
@@ -533,8 +561,8 @@ static RTAssets loadRenderObjects(
             render::AssetProcessor::makeBVHData(objs),
             render::AssetProcessor::initMaterialData(materials.data(),
                                      materials.size(),
-                                     nullptr,
-                                     0)
+                                     imported_textures.data(),
+                                     imported_textures.size())
         };
     } else {
         return {};

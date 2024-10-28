@@ -119,6 +119,9 @@ class BatchRenderer:
     mesh_faces = m.mesh_face
     mesh_vert_offsets = m.mesh_vertadr
     mesh_face_offsets = m.mesh_faceadr
+    mesh_texcoords = m.mesh_texcoord
+    mesh_texcoord_offsets = m.mesh_texcoordadr
+    mesh_texcoord_num = m.mesh_texcoordnum
     geom_types = m.geom_type
     geom_groups = m.geom_group
     geom_data_ids = m.geom_dataid
@@ -131,12 +134,25 @@ class BatchRenderer:
     # TODO: filter for camera ids
     num_cams = m.ncam
 
+    mat_tex_ids = m.mat_texid
+    tex_data = m.tex_data
+  
+    # add 255 every third element to create 4 channel rgba texture
+    tex_data = np.insert(tex_data, np.arange(3, tex_data.shape[0], 3), 255, axis=0)
+    tex_offsets = m.tex_adr
+    tex_widths = m.tex_width
+    tex_heights = m.tex_height
+    tex_nchans = m.tex_nchannel
+
     self.madrona = MadronaBatchRenderer(
         gpu_id = gpu_id,
         mesh_vertices = mesh_verts,
         mesh_faces = mesh_faces,
         mesh_vertex_offsets = mesh_vert_offsets,
         mesh_face_offsets = mesh_face_offsets,
+        mesh_texcoords = mesh_texcoords,
+        mesh_texcoord_offsets = mesh_texcoord_offsets,
+        mesh_texcoord_num = mesh_texcoord_num,
         geom_types = geom_types,
         geom_groups = geom_groups,
         geom_data_ids = geom_data_ids,
@@ -144,6 +160,12 @@ class BatchRenderer:
         geom_mat_ids = geom_mat_ids,
         geom_rgba = geom_rgba,
         mat_rgba = mat_rgba,
+        mat_tex_ids = mat_tex_ids,
+        tex_data = tex_data,
+        tex_offsets = tex_offsets,
+        tex_widths = tex_widths,
+        tex_heights = tex_heights,
+        tex_nchans = tex_nchans,
         light_pos = light_pos,
         light_dir = light_dir,
         num_cams = num_cams,

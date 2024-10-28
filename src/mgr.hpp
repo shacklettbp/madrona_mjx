@@ -24,6 +24,9 @@ struct MJXModelGeometry {
     uint32_t *indices;
     uint32_t *vertexOffsets;
     uint32_t *triOffsets;
+    madrona::math::Vector2 *texCoords;
+    int32_t *texCoordOffsets;
+    uint32_t *texCoordNum;
     uint32_t numVertices;
     uint32_t numTris;
     uint32_t numMeshes;
@@ -39,10 +42,17 @@ struct MJXModel {
     madrona::math::Vector3 *geomSizes;
     madrona::math::Vector4 *geomRGBA;
     madrona::math::Vector4 *matRGBA;
+    int32_t *matTexIDs;
+    uint8_t *texData;
+    int32_t *texOffsets;
+    int32_t *texWidths;
+    int32_t *texHeights;
+    int32_t *texNChans;
     madrona::math::Vector3 *lightPos;
     madrona::math::Vector3 *lightDir;
     uint32_t numGeoms;
     uint32_t numMats;
+    uint32_t numTextures;
     uint32_t numCams;
     uint32_t numLights;
     uint32_t numEnabledGeomGroups;
