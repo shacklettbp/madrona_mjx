@@ -58,26 +58,37 @@ if __name__ == '__main__':
     np.array([0, 1, 2]), args.add_cam_debug_geo, args.use_raytracer,
     viz_gpu_state.get_gpu_handles())
 
-  def init(rng):
-    mjx_data = mjx.make_data(mjx_model)
-    mjx_data.replace(qpos=0.01 * jax.random.uniform(rng, shape=(mjx_model.nq,)))
-    mjx_data = mjx.forward(mjx_model, mjx_data)
-    render_token, rgb, depth = renderer.init(mjx_data)
-    return mjx_data, render_token
-
-  init_fn = jax.jit(jax.vmap(init))
-
   rng = jax.random.PRNGKey(seed=2)
   rng, *key = jax.random.split(rng, args.num_worlds + 1)
-  mjx_data, rtkn = init_fn(jp.array(key))
 
-  def step(carry):
-    data, render_token = carry
-    data = mjx.step(mjx_model, data)
-    _, rgb, depth = renderer.render(render_token, data)
-    return (data, render_token)
+  def init(rng):
+    def init_(rng):
+      mjx_data = mjx.make_data(mjx_model)
+      mjx_data.replace(qpos=0.01 * jax.random.uniform(rng, shape=(mjx_model.nq,)))
+      mjx_data = mjx.forward(mjx_model, mjx_data)
+      render_token, rgb, depth = renderer.init(mjx_data)
+      return mjx_data, render_token
+    
+    return jax.vmap(init_)(rng)
 
-  step_fn = jax.jit(jax.vmap(step))
+  def step(data, action):
+    def step_(data, action):
+      data.replace(ctrl=action)
+      data = mjx.step(mjx_model, data)
+      _, rgb, depth = renderer.render(render_token, data)
+      return data, rgb
+    return jax.vmap(step_)(data, action)
+
+  init_fn = jax.jit(init)
+  step_fn = jax.jit(step)
+  mjx_data, render_token = init_fn(jp.asarray(key))
+
+  def vis_step_fn(carry):
+    rng, data = carry
+    rng, act_rng = jax.random.split(rng)
+    ctrl = jax.random.uniform(act_rng, shape=(args.num_worlds, mjx_model.nu))
+    data, rgb = step_fn(data, ctrl)
+    return rng, data
 
   visualizer = Visualizer(viz_gpu_state, renderer.madrona)
-  visualizer.loop(renderer.madrona, step_fn, (mjx_data, rtkn))
+  visualizer.loop(renderer.madrona, vis_step_fn, (rng, mjx_data))
