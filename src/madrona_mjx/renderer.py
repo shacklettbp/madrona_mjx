@@ -131,8 +131,8 @@ class BatchRenderer:
     mat_rgba = m.mat_rgba
     light_mode = m.light_mode
     light_isdir = m.light_directional
-    light_pos = m.light_pos0
-    light_dir = m.light_dir0
+    light_pos = jax.device_get(m.light_pos)
+    light_dir = jax.device_get(m.light_dir)
     # TODO: filter for camera ids
     num_cams = m.ncam
 
