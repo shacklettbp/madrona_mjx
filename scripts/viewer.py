@@ -40,7 +40,7 @@ def load_model(path: str):
 
 def limit_jax_mem(limit):
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = f"{limit:.2f}"
-limit_jax_mem(0.05)
+limit_jax_mem(0.25)
 
 # Tell XLA to use Triton GEMM
 xla_flags = os.environ.get('XLA_FLAGS', '')
@@ -67,7 +67,7 @@ if __name__ == '__main__':
       mjx_data.replace(qpos=0.01 * jax.random.uniform(rng, shape=(mjx_model.nq,)))
       mjx_data = mjx.forward(mjx_model, mjx_data)
       render_token, rgb, depth = renderer.init(mjx_data)
-      return mjx_data, render_token
+      return mjx_data, render_token, rgb, depth
     
     return jax.vmap(init_)(rng)
 
@@ -75,19 +75,22 @@ if __name__ == '__main__':
     def step_(data, action):
       data.replace(ctrl=action)
       data = mjx.step(mjx_model, data)
+      print('after mjx step')
+      print(data.geom_xpos)
+      print(data.cam_xmat)
       _, rgb, depth = renderer.render(render_token, data)
-      return data, rgb
+      return data, rgb, depth
     return jax.vmap(step_)(data, action)
 
   init_fn = jax.jit(init)
   step_fn = jax.jit(step)
-  mjx_data, render_token = init_fn(jp.asarray(key))
+  mjx_data, render_token, rgb, depth = init_fn(jp.asarray(key))
 
   def vis_step_fn(carry):
     rng, data = carry
     rng, act_rng = jax.random.split(rng)
     ctrl = jax.random.uniform(act_rng, shape=(args.num_worlds, mjx_model.nu))
-    data, rgb = step_fn(data, ctrl)
+    data, rgb, depth = step_fn(data, ctrl)
     return rng, data
 
   visualizer = Visualizer(viz_gpu_state, renderer.madrona)
