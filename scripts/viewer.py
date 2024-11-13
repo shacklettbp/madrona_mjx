@@ -75,9 +75,6 @@ if __name__ == '__main__':
     def step_(data, action):
       data.replace(ctrl=action)
       data = mjx.step(mjx_model, data)
-      print('after mjx step')
-      print(data.geom_xpos)
-      print(data.cam_xmat)
       _, rgb, depth = renderer.render(render_token, data)
       return data, rgb, depth
     return jax.vmap(step_)(data, action)
