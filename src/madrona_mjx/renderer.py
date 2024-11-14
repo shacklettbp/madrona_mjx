@@ -126,7 +126,7 @@ class BatchRenderer:
     geom_groups = m.geom_group
     geom_data_ids = m.geom_dataid
     geom_sizes = jax.device_get(m.geom_size)
-    geom_mat_ids = m.geom_matid
+    geom_mat_ids = jax.device_get(m.geom_matid)
     geom_rgba = jax.device_get(m.geom_rgba)
     mat_rgba = m.mat_rgba
     light_mode = m.light_mode
@@ -210,15 +210,14 @@ class BatchRenderer:
 
       return jax.vmap(to_quat)(state.cam_xmat)
 
-  def init(self, state, geom_rgba):
+  def init(self, state, model):
     geom_quat = self.get_geom_quat(state)
     cam_quat = self.get_cam_quat(state)
-    geom_rgba_uint = jp.array(geom_rgba * 255, jp.uint32)
+    geom_rgba_uint = jp.array(model.geom_rgba * 255, jp.uint32)
 
     def rgbtoint32(rgb):
       color = 0
-      for c in rgb[::-1]:
-          color = (color<<8) + c
+      color = (rgb[0] << 16) + (rgb[1] << 8) + rgb[2]
       return color
 
     rgb_int32 = jax.vmap(rgbtoint32)(geom_rgba_uint)
@@ -230,6 +229,7 @@ class BatchRenderer:
         geom_quat,
         state.cam_xpos,
         cam_quat,
+        model.geom_matid,
         rgb_int32)
 
     return render_token, init_rgb, init_depth
