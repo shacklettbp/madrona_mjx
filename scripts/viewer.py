@@ -40,7 +40,7 @@ def load_model(path: str):
 
 def limit_jax_mem(limit):
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = f"{limit:.2f}"
-limit_jax_mem(0.25)
+limit_jax_mem(0.1)
 
 # Tell XLA to use Triton GEMM
 xla_flags = os.environ.get('XLA_FLAGS', '')

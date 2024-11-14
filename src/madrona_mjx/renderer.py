@@ -127,7 +127,7 @@ class BatchRenderer:
     geom_data_ids = m.geom_dataid
     geom_sizes = jax.device_get(m.geom_size)
     geom_mat_ids = m.geom_matid
-    geom_rgba = m.geom_rgba
+    geom_rgba = jax.device_get(m.geom_rgba)
     mat_rgba = m.mat_rgba
     light_mode = m.light_mode
     light_isdir = m.light_directional
@@ -135,6 +135,7 @@ class BatchRenderer:
     light_dir = jax.device_get(m.light_dir)
     # TODO: filter for camera ids
     num_cams = m.ncam
+    assert(num_cams > 0) # Must have at least one camera for Madrona to work!
 
     mat_tex_ids = m.mat_texid
     tex_data = m.tex_data
@@ -209,10 +210,18 @@ class BatchRenderer:
 
       return jax.vmap(to_quat)(state.cam_xmat)
 
-  def init(self, state):
+  def init(self, state, geom_rgba):
     geom_quat = self.get_geom_quat(state)
     cam_quat = self.get_cam_quat(state)
+    geom_rgba_uint = jp.array(geom_rgba * 255, jp.uint32)
 
+    def rgbtoint32(rgb):
+      color = 0
+      for c in rgb[::-1]:
+          color = (color<<8) + c
+      return color
+
+    rgb_int32 = jax.vmap(rgbtoint32)(geom_rgba_uint)
     render_token = jp.array((), jp.bool)
 
     init_rgb, init_depth, render_token = self.init_prim_fn(
@@ -220,7 +229,8 @@ class BatchRenderer:
         state.geom_xpos,
         geom_quat,
         state.cam_xpos,
-        cam_quat)
+        cam_quat,
+        rgb_int32)
 
     return render_token, init_rgb, init_depth
 

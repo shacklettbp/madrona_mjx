@@ -17,6 +17,7 @@ enum class ExportID : uint32_t {
     InstanceRotations,
     CameraPositions,
     CameraRotations,
+    InstanceRGB,
     RaycastDepth,
     RaycastRGB,
     NumExports,
