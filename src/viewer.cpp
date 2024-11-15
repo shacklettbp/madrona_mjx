@@ -80,34 +80,45 @@ struct Visualizer {
         }, [&]() {
 #ifdef MADRONA_CUDA_SUPPORT
             uint32_t raycast_output_resolution = batchViewWidth;
-
-            unsigned char* print_ptr;
+            uint32_t image_idx = viewer.getCurrentWorldID() * 
+                numCams + std::max(viewer.getCurrentViewID(), (CountT)0);
             int64_t num_bytes = 4 * raycast_output_resolution * 
                 raycast_output_resolution;
-            print_ptr = (unsigned char*)cu::allocReadback(num_bytes);
 
-            char *raycast_tensor = (char *)(mgr.depthTensor().devicePtr());
+            // Extract depth from buffer
+            unsigned char* depth_print_ptr;
+            depth_print_ptr = (unsigned char*)cu::allocReadback(num_bytes);
+
+            char *raycast_tensor_depth = (char *)(mgr.depthTensor().devicePtr());
 
             uint32_t bytes_per_image = 4 * raycast_output_resolution * 
                 raycast_output_resolution;
 
-            uint32_t image_idx = viewer.getCurrentWorldID() * 
-                numCams + std::max(viewer.getCurrentViewID(), (CountT)0);
+            raycast_tensor_depth += image_idx * bytes_per_image;
 
-            raycast_tensor += image_idx * bytes_per_image;
+            cudaMemcpy(depth_print_ptr, raycast_tensor_depth,
+                bytes_per_image,
+                cudaMemcpyDeviceToHost);
+            raycast_tensor_depth = (char *)depth_print_ptr;
 
-            cudaMemcpy(print_ptr, raycast_tensor,
-                    bytes_per_image,
-                    cudaMemcpyDeviceToHost);
-            raycast_tensor = (char *)print_ptr;
+            // Extract rgb from buffer
+            unsigned char* rgb_print_ptr;
+            rgb_print_ptr = (unsigned char*)cu::allocReadback(num_bytes);
+            char *raycast_tensor_rgb = (char *)(mgr.rgbTensor().devicePtr());
 
-            ImGui::Begin("Depth Tensor Debug");
+            raycast_tensor_rgb += image_idx * bytes_per_image;
+            cudaMemcpy(rgb_print_ptr, raycast_tensor_rgb,
+                bytes_per_image,
+                cudaMemcpyDeviceToHost);
+            raycast_tensor_rgb = (char *)rgb_print_ptr;
+
+            ImGui::Begin("RGB and Depth Tensor Debug");
 
             auto draw2 = ImGui::GetWindowDrawList();
             ImVec2 windowPos = ImGui::GetWindowPos();
-            char *raycasters = raycast_tensor;
+            char *raycasters = raycast_tensor_depth;
 
-            int vertOff = 70;
+            int vertOff = 40;
 
             float pixScale = 5;
             float pixSpace = 5;
@@ -123,16 +134,37 @@ struct Visualizer {
                     depth_convert = std::min(255.f, std::max(0.f, depth_convert));
 
                     auto realColor = IM_COL32(
-                            (uint8_t)depth_convert,
-                            (uint8_t)depth_convert,
-                            (uint8_t)depth_convert, 
-                            255);
+                        (uint8_t)depth_convert,
+                        (uint8_t)depth_convert,
+                        (uint8_t)depth_convert, 
+                        255);
 
                     draw2->AddRectFilled(
-                        { (j * pixSpace) + windowPos.x, 
-                          (i * pixSpace) + windowPos.y +vertOff }, 
-                        { (j * pixSpace + pixScale) + windowPos.x,   
-                          (i * pixSpace + pixScale)+ +windowPos.y+vertOff },
+                        { (i * pixSpace) + windowPos.x, 
+                          (j * pixSpace) + windowPos.y +vertOff }, 
+                        { (i * pixSpace + pixScale) + windowPos.x,   
+                          (j * pixSpace + pixScale)+ +windowPos.y+vertOff },
+                        realColor, 0, 0);
+                }
+            }
+
+            int horOff = 300;
+            raycasters = raycast_tensor_rgb;
+            for (int i = 0; i < (int)raycast_output_resolution; i++) {
+                for (int j = 0; j < (int)raycast_output_resolution; j++) {
+                    uint32_t linear_idx = 4 * (j + i * raycast_output_resolution);
+
+                    auto realColor = IM_COL32(
+                        (uint8_t)raycasters[linear_idx + 0],
+                        (uint8_t)raycasters[linear_idx + 1],
+                        (uint8_t)raycasters[linear_idx + 2], 
+                        255);
+
+                    draw2->AddRectFilled(
+                        { (i * pixSpace) + windowPos.x + horOff, 
+                          (j * pixSpace) + windowPos.y + vertOff }, 
+                        { (i * pixSpace + pixScale) + windowPos.x + horOff,   
+                          (j * pixSpace + pixScale)+ +windowPos.y+vertOff },
                         realColor, 0, 0);
                 }
             }
