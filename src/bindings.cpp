@@ -168,13 +168,17 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
                         nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_pos,
                         nb::ndarray<const float, nb::shape<-1, -1, 4>> geom_rot,
                         nb::ndarray<const float, nb::shape<-1, -1, 3>> cam_pos,
-                        nb::ndarray<const float, nb::shape<-1, -1, 4>> cam_rot)
+                        nb::ndarray<const float, nb::shape<-1, -1, 4>> cam_rot,
+                        nb::ndarray<const int32_t, nb::shape<-1, -1>> mat_ids,
+                        nb::ndarray<const uint32_t, nb::shape<-1, -1>> geom_rgb)
 
         {
             mgr.init((math::Vector3 *)geom_pos.data(),
                      (math::Quat *)geom_rot.data(),
                      (math::Vector3 *)cam_pos.data(),
-                     (math::Quat *)cam_rot.data());
+                     (math::Quat *)cam_rot.data(),
+                     (int32_t *)mat_ids.data(),
+                     (uint32_t *)geom_rgb.data());
         })
         .def("render", [](Manager &mgr,
                           nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_pos,

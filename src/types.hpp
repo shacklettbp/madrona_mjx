@@ -19,6 +19,8 @@ using madrona::base::ObjectInstance;
 using madrona::base::ObjectID;
 using madrona::math::Vector3;
 using madrona::math::Quat;
+using madrona::render::MaterialOverride;
+using madrona::render::ColorOverride;
 
 enum class RenderPrimObjectIDs : uint32_t {
     DebugCam = 0,
@@ -43,7 +45,8 @@ enum class MJXGeomType : uint32_t {
 
 struct RenderEntity : public madrona::Archetype<
     ObjectInstance,
-
+    madrona::render::MaterialOverride,
+    madrona::render::ColorOverride,
     // All entities with the Renderable component will be drawn by the
     // viewer and batch renderer
     madrona::render::Renderable

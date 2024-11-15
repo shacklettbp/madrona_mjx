@@ -5,6 +5,7 @@ import numpy as np
 import mujoco
 from mujoco import mjx
 from etils import epath
+import functools
 
 from madrona_mjx.renderer import BatchRenderer
 from madrona_mjx.viz import VisualizerGPUState, Visualizer
@@ -61,34 +62,65 @@ if __name__ == '__main__':
   rng = jax.random.PRNGKey(seed=2)
   rng, *key = jax.random.split(rng, args.num_worlds + 1)
 
-  def init(rng):
-    def init_(rng):
-      mjx_data = mjx.make_data(mjx_model)
-      mjx_data.replace(qpos=0.01 * jax.random.uniform(rng, shape=(mjx_model.nq,)))
-      mjx_data = mjx.forward(mjx_model, mjx_data)
-      render_token, rgb, depth = renderer.init(mjx_data)
-      return mjx_data, render_token
-    
-    return jax.vmap(init_)(rng)
+  def dr(sys, rng):
+    """Randomizes the mjx.Model."""
+    @jax.vmap
+    def rand(rng):
+      rng, color_rng = jax.random.split(rng, 2)
+      new_color = jax.random.uniform(color_rng, (1,), minval=0.0, maxval=0.4)
+      geom_rgba = sys.geom_rgba.at[0, 0:1].set(new_color)
+      geom_matid = sys.geom_matid.at[:].set(-1)
+      geom_matid = geom_matid.at[0].set(-2)
+
+      return geom_rgba, geom_matid
+
+    geom_rgba, geom_matid = rand(rng)
+
+    in_axes = jax.tree_util.tree_map(lambda x: None, sys)
+    in_axes = in_axes.tree_replace({
+        'geom_rgba': 0,
+        'geom_matid': 0,
+    })
+
+    sys = sys.tree_replace({
+        'geom_rgba': geom_rgba,
+        'geom_matid': geom_matid,
+    })
+
+    return sys, in_axes
+
+  randomization_rng = jax.random.split(rng, args.num_worlds)
+  v_randomization_fn = functools.partial(dr, rng=randomization_rng)
+  
+  v_mjx_model, v_in_axes = v_randomization_fn(mjx_model)
+
+  def init(rng, sys):
+    def init_(rng, sys):
+      data = mjx.make_data(sys)
+      data.replace(qpos=0.01 * jax.random.uniform(rng, shape=(sys.nq,)))
+      data = mjx.forward(sys, data)
+      render_token, rgb, depth = renderer.init(data, sys)
+      return data, render_token, rgb, depth
+    return jax.vmap(init_, in_axes=[0, v_in_axes])(rng, sys)
+
+  v_mjx_data, render_token, rgb, depth = init(jp.asarray(key), v_mjx_model)
 
   def step(data, action):
     def step_(data, action):
       data.replace(ctrl=action)
       data = mjx.step(mjx_model, data)
       _, rgb, depth = renderer.render(render_token, data)
-      return data, rgb
+      return data, rgb, depth
     return jax.vmap(step_)(data, action)
 
-  init_fn = jax.jit(init)
   step_fn = jax.jit(step)
-  mjx_data, render_token = init_fn(jp.asarray(key))
 
   def vis_step_fn(carry):
     rng, data = carry
     rng, act_rng = jax.random.split(rng)
     ctrl = jax.random.uniform(act_rng, shape=(args.num_worlds, mjx_model.nu))
-    data, rgb = step_fn(data, ctrl)
+    data, rgb, depth = step_fn(data, ctrl)
     return rng, data
 
   visualizer = Visualizer(viz_gpu_state, renderer.madrona)
-  visualizer.loop(renderer.madrona, vis_step_fn, (rng, mjx_data))
+  visualizer.loop(renderer.madrona, vis_step_fn, (rng, v_mjx_data))

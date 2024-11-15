@@ -87,7 +87,9 @@ public:
     MGR_EXPORT void init(madrona::math::Vector3 *geom_pos,
                          madrona::math::Quat *geom_rot,
                          madrona::math::Vector3 *cam_pos,
-                         madrona::math::Quat *cam_rot);
+                         madrona::math::Quat *cam_rot,
+                         int32_t *mat_ids,
+                         uint32_t *geom_rgb);
     MGR_EXPORT void render(madrona::math::Vector3 *geom_pos,
                            madrona::math::Quat *geom_rot,
                            madrona::math::Vector3 *cam_pos,

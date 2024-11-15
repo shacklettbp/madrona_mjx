@@ -126,8 +126,8 @@ class BatchRenderer:
     geom_groups = m.geom_group
     geom_data_ids = m.geom_dataid
     geom_sizes = jax.device_get(m.geom_size)
-    geom_mat_ids = m.geom_matid
-    geom_rgba = m.geom_rgba
+    geom_mat_ids = jax.device_get(m.geom_matid)
+    geom_rgba = jax.device_get(m.geom_rgba)
     mat_rgba = m.mat_rgba
     light_mode = m.light_mode
     light_isdir = m.light_directional
@@ -135,6 +135,7 @@ class BatchRenderer:
     light_dir = jax.device_get(m.light_dir)
     # TODO: filter for camera ids
     num_cams = m.ncam
+    assert(num_cams > 0) # Must have at least one camera for Madrona to work!
 
     mat_tex_ids = m.mat_texid
     tex_data = m.tex_data
@@ -209,10 +210,17 @@ class BatchRenderer:
 
       return jax.vmap(to_quat)(state.cam_xmat)
 
-  def init(self, state):
+  def init(self, state, model):
     geom_quat = self.get_geom_quat(state)
     cam_quat = self.get_cam_quat(state)
+    geom_rgba_uint = jp.array(model.geom_rgba * 255, jp.uint32)
 
+    def rgbtoint32(rgb):
+      color = 0
+      color = (rgb[0] << 16) + (rgb[1] << 8) + rgb[2]
+      return color
+
+    rgb_int32 = jax.vmap(rgbtoint32)(geom_rgba_uint)
     render_token = jp.array((), jp.bool)
 
     init_rgb, init_depth, render_token = self.init_prim_fn(
@@ -220,7 +228,9 @@ class BatchRenderer:
         state.geom_xpos,
         geom_quat,
         state.cam_xpos,
-        cam_quat)
+        cam_quat,
+        model.geom_matid,
+        rgb_int32)
 
     return render_token, init_rgb, init_depth
 
@@ -351,7 +361,12 @@ def _setup_jax_primitives(renderer, num_worlds, num_geoms, num_cams,
   _render_primitive.def_abstract_eval(_render_abstract)
 
   def _init_prim_batch(vector_arg_values, batch_axes):
-    assert all(b == batch_axes[1] for b in batch_axes[1:])
+    # assert all(b == batch_axes[1] for b in batch_axes[1:])
+    batch_axes = list(batch_axes)
+    for i in range(1, len(batch_axes)):
+      if batch_axes[i] != batch_axes[1]:
+        print('Inferred batch not found, overriding manually')
+        batch_axes[i] = 0
     batch_dims = vector_arg_values[1].shape[:-2]
     if len(batch_dims) > 1:
       num_worlds = np.prod(batch_dims)
@@ -367,7 +382,12 @@ def _setup_jax_primitives(renderer, num_worlds, num_geoms, num_cams,
     return result, result_axes
 
   def _render_prim_batch(vector_arg_values, batch_axes):
-    assert all(b == batch_axes[1] for b in batch_axes[1:])
+    # assert all(b == batch_axes[1] for b in batch_axes[1:])
+    batch_axes = list(batch_axes)
+    for i in range(1, len(batch_axes)):
+      if batch_axes[i] != batch_axes[1]:
+        print('Inferred batch not found, overriding manually')
+        batch_axes[i] = 0
     batch_dims = vector_arg_values[1].shape[:-2]
     if len(batch_dims) > 1:
       num_worlds = np.prod(batch_dims)

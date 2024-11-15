@@ -23,7 +23,10 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
         (uint32_t)ExportID::InstancePositions);
     registry.exportColumn<RenderEntity, Rotation>(
         (uint32_t)ExportID::InstanceRotations);
-
+    registry.exportColumn<RenderEntity, MaterialOverride>( 
+        (uint32_t)ExportID::InstanceMatOverrides);
+    registry.exportColumn<RenderEntity, ColorOverride>( 
+        (uint32_t)ExportID::InstanceColorOverrides);
     
     if (cfg.useDebugCamEntity) {
         registry.registerArchetype<DebugCameraEntity>();
@@ -168,6 +171,8 @@ Sim::Sim(Engine &ctx,
             ctx.get<ObjectID>(instance) = ObjectID { cfg.geomDataIDs[geom_idx] };
         }
         ctx.get<Scale>(instance) = scale;
+        ctx.get<MaterialOverride>(instance) = MaterialOverride { -1 };
+        ctx.get<ColorOverride>(instance) = ColorOverride { 0 };
     }
 
     for (CountT cam_idx = 0; cam_idx < (CountT)cfg.numCams; cam_idx++) {
