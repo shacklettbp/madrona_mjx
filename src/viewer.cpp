@@ -140,15 +140,15 @@ struct Visualizer {
                         255);
 
                     draw2->AddRectFilled(
-                        { (i * pixSpace) + windowPos.x, 
-                          (j * pixSpace) + windowPos.y +vertOff }, 
-                        { (i * pixSpace + pixScale) + windowPos.x,   
-                          (j * pixSpace + pixScale)+ +windowPos.y+vertOff },
+                        { (j * pixSpace) + windowPos.x, 
+                          (i * pixSpace) + windowPos.y +vertOff }, 
+                        { (j * pixSpace + pixScale) + windowPos.x,   
+                          (i * pixSpace + pixScale)+ +windowPos.y+vertOff },
                         realColor, 0, 0);
                 }
             }
 
-            int horOff = 300;
+            int horOff = 340;
             raycasters = raycast_tensor_rgb;
             for (int i = 0; i < (int)raycast_output_resolution; i++) {
                 for (int j = 0; j < (int)raycast_output_resolution; j++) {
@@ -161,10 +161,10 @@ struct Visualizer {
                         255);
 
                     draw2->AddRectFilled(
-                        { (i * pixSpace) + windowPos.x + horOff, 
-                          (j * pixSpace) + windowPos.y + vertOff }, 
-                        { (i * pixSpace + pixScale) + windowPos.x + horOff,   
-                          (j * pixSpace + pixScale)+ +windowPos.y+vertOff },
+                        { (j * pixSpace) + windowPos.x + horOff, 
+                          (i * pixSpace) + windowPos.y + vertOff }, 
+                        { (j * pixSpace + pixScale) + windowPos.x + horOff,   
+                          (i * pixSpace + pixScale)+ +windowPos.y+vertOff },
                         realColor, 0, 0);
                 }
             }
