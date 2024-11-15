@@ -361,7 +361,12 @@ def _setup_jax_primitives(renderer, num_worlds, num_geoms, num_cams,
   _render_primitive.def_abstract_eval(_render_abstract)
 
   def _init_prim_batch(vector_arg_values, batch_axes):
-    assert all(b == batch_axes[1] for b in batch_axes[1:])
+    # assert all(b == batch_axes[1] for b in batch_axes[1:])
+    batch_axes = list(batch_axes)
+    for i in range(1, len(batch_axes)):
+      if batch_axes[i] != batch_axes[1]:
+        print('Inferred batch not found, overriding manually')
+        batch_axes[i] = 0
     batch_dims = vector_arg_values[1].shape[:-2]
     if len(batch_dims) > 1:
       num_worlds = np.prod(batch_dims)
@@ -377,7 +382,12 @@ def _setup_jax_primitives(renderer, num_worlds, num_geoms, num_cams,
     return result, result_axes
 
   def _render_prim_batch(vector_arg_values, batch_axes):
-    assert all(b == batch_axes[1] for b in batch_axes[1:])
+    # assert all(b == batch_axes[1] for b in batch_axes[1:])
+    batch_axes = list(batch_axes)
+    for i in range(1, len(batch_axes)):
+      if batch_axes[i] != batch_axes[1]:
+        print('Inferred batch not found, overriding manually')
+        batch_axes[i] = 0
     batch_dims = vector_arg_values[1].shape[:-2]
     if len(batch_dims) > 1:
       num_worlds = np.prod(batch_dims)
