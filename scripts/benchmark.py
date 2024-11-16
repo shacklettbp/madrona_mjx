@@ -37,7 +37,7 @@ args = arg_parser.parse_args()
 
 def limit_jax_mem(limit):
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = f"{limit:.2f}"
-limit_jax_mem(0.1)
+limit_jax_mem(0.2)
 
 
 def load_model(path: str):
@@ -154,13 +154,17 @@ if __name__ == '__main__':
   
   print(f'Rolling out {args.nstep} steps at dt = {model.opt.timestep:.3f}...')
   jit_time, run_time, steps = benchmark(
-      model,
-      args.nstep,
-      args.num_worlds,
-      args.unroll,
-      args.solver,
-      args.iterations,
-      args.ls_iterations
+      m=model,
+      nstep=args.nstep,
+      batch_size=args.num_worlds,
+      unroll_steps=args.unroll,
+      solver=args.solver,
+      iterations=args.iterations,
+      ls_iterations=args.ls_iterations,
+      gpu_id=args.gpu_id,
+      batch_render_view_width=args.batch_render_view_width,
+      batch_render_view_height=args.batch_render_view_height,
+      use_raytracer=args.use_raytracer
   )
 
   print(f"""
