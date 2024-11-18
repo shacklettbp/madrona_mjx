@@ -67,24 +67,32 @@ if __name__ == '__main__':
     @jax.vmap
     def rand(rng):
       rng, color_rng = jax.random.split(rng, 2)
-      new_color = jax.random.uniform(color_rng, (1,), minval=0.0, maxval=0.4)
-      geom_rgba = sys.geom_rgba.at[0, 0:1].set(new_color)
+
+      # A matid of -1 means use default material,
+      # matid of -2 means use color override
       geom_matid = sys.geom_matid.at[:].set(-1)
       geom_matid = geom_matid.at[0].set(-2)
+      
+      new_color = jax.random.uniform(color_rng, (1,), minval=0.0, maxval=0.4)
+      geom_rgba = sys.geom_rgba.at[0, 0:1].set(new_color)
+      new_size = jax.random.uniform(color_rng, (3,), minval=1, maxval=5)
+      geom_size = sys.geom_size.at[0, 0:3].set(new_size)
 
-      return geom_rgba, geom_matid
+      return geom_rgba, geom_matid, geom_size
 
-    geom_rgba, geom_matid = rand(rng)
+    geom_rgba, geom_matid, geom_size = rand(rng)
 
     in_axes = jax.tree_util.tree_map(lambda x: None, sys)
     in_axes = in_axes.tree_replace({
         'geom_rgba': 0,
         'geom_matid': 0,
+        'geom_size': 0,
     })
 
     sys = sys.tree_replace({
         'geom_rgba': geom_rgba,
         'geom_matid': geom_matid,
+        'geom_size': geom_size,
     })
 
     return sys, in_axes
@@ -94,6 +102,7 @@ if __name__ == '__main__':
   
   v_mjx_model, v_in_axes = v_randomization_fn(mjx_model)
 
+  @jax.jit
   def init(rng, sys):
     def init_(rng, sys):
       data = mjx.make_data(sys)

@@ -98,6 +98,7 @@ struct JAXIO {
     Quat *geomRotations;
     Vector3 *camPositions;
     Quat *camRotations;
+    Diag3x3 *geomSizes;
     int32_t *matIDs;
     uint32_t *geomRGB;
 
@@ -113,6 +114,7 @@ struct JAXIO {
         auto cam_rotations = (Quat *)buffers[buf_idx++];
         auto mat_ids = (int32_t *)buffers[buf_idx++];
         auto geom_rgb = (uint32_t *)buffers[buf_idx++];
+        auto geom_sizes = (Diag3x3 *)buffers[buf_idx++];
         auto rgb_out = (uint8_t *)buffers[buf_idx++];
         auto depth_out = (float *)buffers[buf_idx++];
 
@@ -121,6 +123,7 @@ struct JAXIO {
             .geomRotations = geom_rotations,
             .camPositions = cam_positions,
             .camRotations = cam_rotations,
+            .geomSizes = geom_sizes,
             .matIDs = mat_ids,
             .geomRGB = geom_rgb,
             .rgbOut = rgb_out,
@@ -143,6 +146,7 @@ struct JAXIO {
             .geomRotations = geom_rotations,
             .camPositions = cam_positions,
             .camRotations = cam_rotations,
+            .geomSizes = nullptr,
             .matIDs = nullptr,
             .geomRGB = nullptr,
             .rgbOut = rgb_out,
@@ -230,7 +234,8 @@ struct Manager::Impl {
             cudaMemcpyDeviceToDevice, strm);
     }
 
-    inline void copyInVisuals(
+    inline void copyInProperties(
+        Diag3x3 *geom_sizes,
         int32_t *mat_overrides,
         uint32_t *col_overrides,
         cudaStream_t strm)
@@ -245,6 +250,11 @@ struct Manager::Impl {
             col_overrides,
             sizeof(ColorOverride) * numGeoms * cfg.numWorlds,
             cudaMemcpyDeviceToDevice, strm);
+        cudaMemcpyAsync(
+            gpuExec.getExported((CountT)ExportID::InstanceScales),
+            geom_sizes,
+            sizeof(Diag3x3) * numGeoms * cfg.numWorlds,
+            cudaMemcpyDeviceToDevice, strm);
     }
 
     inline void init(Vector3 *geom_positions,
@@ -252,7 +262,8 @@ struct Manager::Impl {
                      Vector3 *cam_positions,
                      Quat *cam_rotations,
                      int32_t *mat_ids,
-                     uint32_t *geom_rgb)
+                     uint32_t *geom_rgb,
+                     Diag3x3 *geom_sizes)
     {
         MWCudaLaunchGraph init_graph =
             gpuExec.buildLaunchGraph(TaskGraphID::Init);
@@ -261,7 +272,7 @@ struct Manager::Impl {
 
         copyInTransforms(geom_positions, geom_rotations,
                          cam_positions, cam_rotations, 0);
-        copyInVisuals(mat_ids, geom_rgb, 0);
+        copyInProperties(geom_sizes, mat_ids, geom_rgb, 0);
 
         gpuExec.run(renderGraph);
         renderImpl();
@@ -329,7 +340,7 @@ struct Manager::Impl {
 
         copyInTransforms(jax_io.geomPositions, jax_io.geomRotations,
                          jax_io.camPositions, jax_io.camRotations, strm);
-        copyInVisuals(jax_io.matIDs, jax_io.geomRGB, strm);
+        copyInProperties(jax_io.geomSizes, jax_io.matIDs, jax_io.geomRGB, strm);
 
         gpuExec.runAsync(renderGraph, strm);
 
@@ -744,9 +755,10 @@ Manager::~Manager() {}
 
 void Manager::init(math::Vector3 *geom_pos, math::Quat *geom_rot,
                    math::Vector3 *cam_pos, math::Quat *cam_rot,
-                   int32_t *mat_ids, uint32_t *geom_rgb)
+                   int32_t *mat_ids, uint32_t *geom_rgb,
+                   math::Diag3x3 *geom_sizes)
 {
-    impl_->init(geom_pos, geom_rot, cam_pos, cam_rot, mat_ids, geom_rgb);
+    impl_->init(geom_pos, geom_rot, cam_pos, cam_rot, mat_ids, geom_rgb, geom_sizes);
 }
 
 void Manager::render(math::Vector3 *geom_pos, math::Quat *geom_rot,

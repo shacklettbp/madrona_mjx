@@ -210,17 +210,35 @@ class BatchRenderer:
 
       return jax.vmap(to_quat)(state.cam_xmat)
 
+  def adjust_scale(self, geom_size, geom_type):
+    '''Returns the adjusted madrona scale of the geometry based on geom_type.'''
+    def adjust(size, gtype):
+      x, y, z = size
+      r = jp.where(gtype == 0, jp.array([x, y, 1], jp.float32), size)
+      r = jp.where(gtype == 1, jp.array([1, 1, 1], jp.float32), size)
+      r = jp.where(gtype == 2, jp.array([x, x, x], jp.float32), size)
+      r = jp.where(gtype == 3, jp.array([x, x, y], jp.float32), size)
+      r = jp.where(gtype == 4, jp.array([1, 1, 1], jp.float32), size)
+      r = jp.where(gtype == 5, jp.array([x, x, y], jp.float32), size)
+      r = jp.where(gtype == 6, jp.array([x*2, y*2, z*2], jp.float32), size)
+      r = jp.where(gtype == 7, jp.array([1, 1, 1], jp.float32), size)
+      return r
+    
+    return jax.vmap(adjust)(geom_size, geom_type)
+
   def init(self, state, model):
     geom_quat = self.get_geom_quat(state)
     cam_quat = self.get_cam_quat(state)
     geom_rgba_uint = jp.array(model.geom_rgba * 255, jp.uint32)
+    geom_size = self.adjust_scale(model.geom_size, model.geom_type)
 
-    def rgbtoint32(rgb):
+    def rgb2int(rgb):
       color = 0
       color = (rgb[0] << 16) + (rgb[1] << 8) + rgb[2]
       return color
 
-    rgb_int32 = jax.vmap(rgbtoint32)(geom_rgba_uint)
+    rgb_uint32 = jax.vmap(rgb2int)(geom_rgba_uint)
+    
     render_token = jp.array((), jp.bool)
 
     init_rgb, init_depth, render_token = self.init_prim_fn(
@@ -230,7 +248,8 @@ class BatchRenderer:
         state.cam_xpos,
         cam_quat,
         model.geom_matid,
-        rgb_int32)
+        rgb_uint32,
+        geom_size)
 
     return render_token, init_rgb, init_depth
 

@@ -23,6 +23,8 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
         (uint32_t)ExportID::InstancePositions);
     registry.exportColumn<RenderEntity, Rotation>(
         (uint32_t)ExportID::InstanceRotations);
+    registry.exportColumn<RenderEntity, Scale>(
+        (uint32_t)ExportID::InstanceScales);
     registry.exportColumn<RenderEntity, MaterialOverride>( 
         (uint32_t)ExportID::InstanceMatOverrides);
     registry.exportColumn<RenderEntity, ColorOverride>( 
