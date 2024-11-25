@@ -55,13 +55,14 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
 }
 
 static void setupRenderTasks(TaskGraphBuilder &builder,
-                             Span<const TaskGraphNodeID> deps)
+                             Span<const TaskGraphNodeID> deps,
+                             bool update_mats = false)
 {
 #if 0
     builder.addToGraph<ParallelForNode<
         Engine, printTransforms, Position, Rotation, Scale, ObjectID>>(deps);
 #endif
-    RenderingSystem::setupTasks(builder, deps);
+    RenderingSystem::setupTasks(builder, deps, update_mats);
 }
 
 #ifdef MADRONA_GPU_MODE
@@ -103,9 +104,13 @@ void Sim::setupTasks(TaskGraphManager &taskgraph_mgr, const Config &cfg)
     TaskGraphBuilder &init_builder = taskgraph_mgr.init(TaskGraphID::Init);
     setupInitTasks(init_builder, cfg);
 
+    TaskGraphBuilder &render_init_builder =
+        taskgraph_mgr.init(TaskGraphID::RenderInit);
+    setupRenderTasks(render_init_builder, {}, true);
+
     TaskGraphBuilder &render_tasks_builder =
         taskgraph_mgr.init(TaskGraphID::Render);
-    setupRenderTasks(render_tasks_builder, {});
+    setupRenderTasks(render_tasks_builder, {}, false);
 }
 
 Sim::Sim(Engine &ctx,
@@ -117,9 +122,20 @@ Sim::Sim(Engine &ctx,
 
     for (CountT geom_idx = 0; geom_idx < (CountT)cfg.numGeoms; geom_idx++) {
 
-        Entity instance = ctx.makeRenderableEntity<RenderEntity>();
+        Entity instance;
+        if (cfg.geomDataIDs[geom_idx] == -1) {
+            instance = ctx.makeEntity<RenderEntity>();
+            render::RenderingSystem::disableEntityRenderable(ctx, instance);
+            ctx.get<ObjectID>(instance) = ObjectID {0};
+        }
+        else {
+            instance = ctx.makeRenderableEntity<RenderEntity>();
+            ctx.get<ObjectID>(instance) = ObjectID { cfg.geomDataIDs[geom_idx] };
+        }
+
         ctx.get<Position>(instance) = Vector3::zero();
         ctx.get<Rotation>(instance) = Quat { 1, 0, 0, 0 };
+
 
         Diag3x3 scale;
         switch ((MJXGeomType)cfg.geomTypes[geom_idx]) {
@@ -165,13 +181,6 @@ Sim::Sim(Engine &ctx,
         } break;
         }
 
-        if (cfg.geomDataIDs[geom_idx] == -1) {
-            ctx.get<ObjectID>(instance) = ObjectID {0};
-            scale = Diag3x3 { 0, 0, 0 };
-        } 
-        else {
-            ctx.get<ObjectID>(instance) = ObjectID { cfg.geomDataIDs[geom_idx] };
-        }
         ctx.get<Scale>(instance) = scale;
         ctx.get<MaterialOverride>(instance) = MaterialOverride { -1 };
         ctx.get<ColorOverride>(instance) = ColorOverride { 0 };
@@ -192,6 +201,16 @@ Sim::Sim(Engine &ctx,
         render::RenderingSystem::attachEntityToView(
             ctx, cam, 60.f, 0.001f, Vector3::zero());
     }
+
+    Entity light = render::RenderingSystem::makeLight(ctx);
+    render::RenderingSystem::configureLight(ctx, light, render::LightDesc {
+        .type = render::LightDesc::Type::Directional,
+        .castShadow = false,
+        .position = Vector3::zero(),
+        .direction = Vector3 { 0, 0, -1 },
+        .cutoff = 0.78539816339f,
+        .active = true
+    });
 }
 
 // This declaration is needed for the GPU backend in order to generate the

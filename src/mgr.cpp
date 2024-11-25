@@ -250,11 +250,11 @@ struct Manager::Impl {
             col_overrides,
             sizeof(ColorOverride) * numGeoms * cfg.numWorlds,
             cudaMemcpyDeviceToDevice, strm);
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::InstanceScales),
-            geom_sizes,
-            sizeof(Diag3x3) * numGeoms * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
+        // cudaMemcpyAsync(
+        //     gpuExec.getExported((CountT)ExportID::InstanceScales),
+        //     geom_sizes,
+        //     sizeof(Diag3x3) * numGeoms * cfg.numWorlds,
+        //     cudaMemcpyDeviceToDevice, strm);
     }
 
     inline void init(Vector3 *geom_positions,
@@ -267,6 +267,9 @@ struct Manager::Impl {
     {
         MWCudaLaunchGraph init_graph =
             gpuExec.buildLaunchGraph(TaskGraphID::Init);
+        
+        MWCudaLaunchGraph render_init_graph =
+            gpuExec.buildLaunchGraph(TaskGraphID::RenderInit);
 
         gpuExec.run(init_graph);
 
@@ -274,7 +277,7 @@ struct Manager::Impl {
                          cam_positions, cam_rotations, 0);
         copyInProperties(geom_sizes, mat_ids, geom_rgb, 0);
 
-        gpuExec.run(renderGraph);
+        gpuExec.run(render_init_graph);
         renderImpl();
     }
 
@@ -333,6 +336,9 @@ struct Manager::Impl {
     {
         MWCudaLaunchGraph init_graph =
             gpuExec.buildLaunchGraph(TaskGraphID::Init);
+        
+        MWCudaLaunchGraph render_init_graph =
+            gpuExec.buildLaunchGraph(TaskGraphID::RenderInit);
 
         JAXIO jax_io = JAXIO::makeInit(buffers);
 
@@ -342,7 +348,7 @@ struct Manager::Impl {
                          jax_io.camPositions, jax_io.camRotations, strm);
         copyInProperties(jax_io.geomSizes, jax_io.matIDs, jax_io.geomRGB, strm);
 
-        gpuExec.runAsync(renderGraph, strm);
+        gpuExec.runAsync(render_init_graph, strm);
 
         // Currently a CPU sync is needed to read back the total number of
         // instances for Vulkan
