@@ -250,11 +250,11 @@ struct Manager::Impl {
             col_overrides,
             sizeof(ColorOverride) * numGeoms * cfg.numWorlds,
             cudaMemcpyDeviceToDevice, strm);
-        // cudaMemcpyAsync(
-        //     gpuExec.getExported((CountT)ExportID::InstanceScales),
-        //     geom_sizes,
-        //     sizeof(Diag3x3) * numGeoms * cfg.numWorlds,
-        //     cudaMemcpyDeviceToDevice, strm);
+        cudaMemcpyAsync(
+            gpuExec.getExported((CountT)ExportID::InstanceScales),
+            geom_sizes,
+            sizeof(Diag3x3) * numGeoms * cfg.numWorlds,
+            cudaMemcpyDeviceToDevice, strm);
     }
 
     inline void init(Vector3 *geom_positions,
