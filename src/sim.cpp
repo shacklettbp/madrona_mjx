@@ -135,53 +135,10 @@ Sim::Sim(Engine &ctx,
 
         ctx.get<Position>(instance) = Vector3::zero();
         ctx.get<Rotation>(instance) = Quat { 1, 0, 0, 0 };
-
-
-        Diag3x3 scale;
-        switch ((MJXGeomType)cfg.geomTypes[geom_idx]) {
-        case MJXGeomType::Plane: {
-            Vector3 geom_size = cfg.geomSizes[geom_idx];
-            scale.d0 = geom_size.x;
-            scale.d1 = geom_size.y;
-            scale.d2 = 1;
-        } break;
-        case MJXGeomType::Sphere: {
-            Vector3 geom_size = cfg.geomSizes[geom_idx];
-            scale.d0 = geom_size.x;
-            scale.d1 = geom_size.x;
-            scale.d2 = geom_size.x;
-        } break;
-        case MJXGeomType::Capsule: {
-            Vector3 geom_size = cfg.geomSizes[geom_idx];
-            scale.d0 = geom_size.x;
-            scale.d1 = geom_size.x;
-            scale.d2 = geom_size.y;
-        } break;
-        case MJXGeomType::Box: {
-            Vector3 geom_size = cfg.geomSizes[geom_idx];
-            scale.d0 = geom_size.x * 2;
-            scale.d1 = geom_size.y * 2;
-            scale.d2 = geom_size.z * 2;
-        } break;
-        case MJXGeomType::Cylinder: {
-            Vector3 geom_size = cfg.geomSizes[geom_idx];
-            scale.d0 = geom_size.x;
-            scale.d1 = geom_size.x;
-            scale.d2 = geom_size.y;
-        } break;
-        case MJXGeomType::Mesh: {
-            scale = Diag3x3 { 1, 1, 1 };
-        } break;
-        case MJXGeomType::Heightfield:
-        case MJXGeomType::Ellipsoid:
-            assert(false);
-            break;
-        default: {
-            assert(false);
-        } break;
-        }
-
-        ctx.get<Scale>(instance) = scale;
+        ctx.get<Scale>(instance) = Diag3x3 { 
+            cfg.geomSizes[geom_idx].x,
+            cfg.geomSizes[geom_idx].y,
+            cfg.geomSizes[geom_idx].z };
         ctx.get<MaterialOverride>(instance) = MaterialOverride { -1 };
         ctx.get<ColorOverride>(instance) = ColorOverride { 0 };
     }
