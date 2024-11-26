@@ -6,6 +6,7 @@ import mujoco
 from mujoco import mjx
 from etils import epath
 import functools
+import pickle
 
 from madrona_mjx.renderer import BatchRenderer
 from madrona_mjx.viz import VisualizerGPUState, Visualizer
@@ -49,9 +50,9 @@ xla_flags += ' --xla_gpu_triton_gemm_any=True'
 os.environ['XLA_FLAGS'] = xla_flags
 
 if __name__ == '__main__':
-  
   model = load_model(args.mjcf)
   mjx_model = mjx.put_model(model)
+  mjx_data = mjx.make_data(mjx_model)
 
   renderer = BatchRenderer(
     mjx_model, args.gpu_id, args.num_worlds, 
@@ -97,39 +98,29 @@ if __name__ == '__main__':
 
     return sys, in_axes
 
-  randomization_rng = jax.random.split(rng, args.num_worlds)
-  v_randomization_fn = functools.partial(dr, rng=randomization_rng)
-  
-  v_mjx_model, v_in_axes = v_randomization_fn(mjx_model)
+  v_mjx_model, v_in_axes = dr(mjx_model, jax.random.split(rng, args.num_worlds))
 
-  @jax.jit
-  def init(rng, sys):
-    def init_(rng, sys):
-      data = mjx.make_data(sys)
-      data.replace(qpos=0.01 * jax.random.uniform(rng, shape=(sys.nq,)))
-      data = mjx.forward(sys, data)
-      render_token, rgb, depth = renderer.init(data, sys)
+  def init(rng, model):
+    def init_(rng, model):
+      data = mjx.make_data(model)
+      data = mjx.forward(model, data)
+      render_token, rgb, depth = renderer.init(data, model)
       return data, render_token, rgb, depth
-    return jax.vmap(init_, in_axes=[0, v_in_axes])(rng, sys)
+    return jax.vmap(init_, in_axes=[0, v_in_axes])(rng, model)
 
   v_mjx_data, render_token, rgb, depth = init(jp.asarray(key), v_mjx_model)
-
-  def step(data, action):
-    def step_(data, action):
-      data.replace(ctrl=action)
-      data = mjx.step(mjx_model, data)
+  
+  @jax.jit
+  def step(data):
+    def step_(data):
       _, rgb, depth = renderer.render(render_token, data)
       return data, rgb, depth
-    return jax.vmap(step_)(data, action)
-
-  step_fn = jax.jit(step)
+    return jax.vmap(step_)(data)
 
   def vis_step_fn(carry):
-    rng, data = carry
-    rng, act_rng = jax.random.split(rng)
-    ctrl = jax.random.uniform(act_rng, shape=(args.num_worlds, mjx_model.nu))
-    data, rgb, depth = step_fn(data, ctrl)
-    return rng, data
+    data = carry
+    data, rgb, depth = step(data)
+    return data
 
   visualizer = Visualizer(viz_gpu_state, renderer.madrona)
-  visualizer.loop(renderer.madrona, vis_step_fn, (rng, v_mjx_data))
+  visualizer.loop(renderer.madrona, vis_step_fn, (v_mjx_data))

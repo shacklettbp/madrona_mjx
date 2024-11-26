@@ -1,14 +1,18 @@
 """Variation of mjx testspeed for benchmarking batch renderings"""
 
 import os
+import time
 from typing import Tuple
 import jax
 import jax.numpy as jp
+import numpy as np
 import mujoco
 from mujoco import mjx
 from mujoco.mjx._src.test_util import _measure
 from mujoco.mjx._src import io
+from mujoco.mjx._src import forward
 from etils import epath
+import functools
 
 from madrona_mjx.renderer import BatchRenderer
 
@@ -33,7 +37,7 @@ args = arg_parser.parse_args()
 
 def limit_jax_mem(limit):
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = f"{limit:.2f}"
-limit_jax_mem(0.1)
+limit_jax_mem(0.2)
 
 
 def load_model(path: str):
@@ -46,7 +50,6 @@ def load_model(path: str):
       assets[f.name] = f.read_bytes()
   model = mujoco.MjModel.from_xml_string(xml, assets)
   return model
-
 
 def benchmark(
     m: mujoco.MjModel,
@@ -81,37 +84,65 @@ def benchmark(
     np.array([0, 1, 2]), False, args.use_raytracer,
     None)
 
-  @jax.pmap
-  def init(key):
-    key = jax.random.split(key, batch_size // jax.device_count())
+  rng = jax.random.PRNGKey(seed=2)
+  rng, *key = jax.random.split(rng, args.num_worlds + 1)
 
+  def dr(sys, rng):
+    """Randomizes the mjx.Model."""
     @jax.vmap
-    def random_init(key):
-      d = io.make_data(m)
-      qvel = 0.01 * jax.random.normal(key, shape=(m.nv,))
-      d = d.replace(qvel=qvel)
-      rt, rgb, depth = renderer.init(mjx_data)
-      return d, rt
+    def rand(rng):
+      rng, color_rng = jax.random.split(rng, 2)
+      new_color = jax.random.uniform(color_rng, (1,), minval=0.0, maxval=0.4)
+      geom_rgba = sys.geom_rgba.at[0, 0:1].set(new_color)
+      geom_matid = sys.geom_matid.at[:].set(-1)
+      geom_matid = geom_matid.at[0].set(-2)
 
-    return random_init(key)
+      return geom_rgba, geom_matid
 
-  key = jax.random.split(jax.random.key(0), jax.device_count())
-  d, rt = init(key)
-  jax.block_until_ready(d)
+    geom_rgba, geom_matid = rand(rng)
 
-  @jax.pmap
-  def unroll(d):
+    in_axes = jax.tree_util.tree_map(lambda x: None, sys)
+    in_axes = in_axes.tree_replace({
+        'geom_rgba': 0,
+        'geom_matid': 0,
+    })
+
+    sys = sys.tree_replace({
+        'geom_rgba': geom_rgba,
+        'geom_matid': geom_matid,
+    })
+
+    return sys, in_axes
+
+  randomization_rng = jax.random.split(rng, args.num_worlds)
+  v_randomization_fn = functools.partial(dr, rng=randomization_rng)
+  
+  v_mjx_model, v_in_axes = v_randomization_fn(m)
+
+  def init(rng, sys):
+    def init_(rng, sys):
+      data = mjx.make_data(sys)
+      data.replace(qpos=0.01 * jax.random.uniform(rng, shape=(sys.nq,)))
+      data = mjx.forward(sys, data)
+      render_token, rgb, depth = renderer.init(data, sys)
+      return data, render_token, rgb, depth
+    return jax.vmap(init_, in_axes=[0, v_in_axes])(rng, sys)
+
+  v_mjx_data, render_token, rgb, depth = init(jp.asarray(key), v_mjx_model)
+  jax.block_until_ready(v_mjx_data)
+
+  @jax.jit
+  def unroll(v_data):
     @jax.vmap
     def step(d, _):
       d = forward.step(m, d)
-      _, rgb, depth = renderer.render(rt, d)
-      return d, rgb, None
+      _, rgb, depth = renderer.render(render_token, d)
+      return d, None
+    d, _ = jax.lax.scan(step, v_data, None, length=nstep, unroll=unroll_steps)
 
-    d, rgb, _ = jax.lax.scan(step, d, None, length=nstep, unroll=unroll_steps)
+    return d
 
-    return d, rgb
-
-  jit_time, run_time = _measure(unroll, d)
+  jit_time, run_time = _measure(unroll, v_mjx_data)
   steps = nstep * batch_size
 
   return jit_time, run_time, steps
@@ -122,14 +153,18 @@ if __name__ == '__main__':
   model = load_model(args.mjcf)
   
   print(f'Rolling out {args.nstep} steps at dt = {model.opt.timestep:.3f}...')
-  jit_time, run_time, steps = mjx.benchmark(
-      model,
-      args.nstep,
-      args.num_worlds,
-      args.unroll,
-      args.solver,
-      args.iterations,
-      args.ls_iterations
+  jit_time, run_time, steps = benchmark(
+      m=model,
+      nstep=args.nstep,
+      batch_size=args.num_worlds,
+      unroll_steps=args.unroll,
+      solver=args.solver,
+      iterations=args.iterations,
+      ls_iterations=args.ls_iterations,
+      gpu_id=args.gpu_id,
+      batch_render_view_width=args.batch_render_view_width,
+      batch_render_view_height=args.batch_render_view_height,
+      use_raytracer=args.use_raytracer
   )
 
   print(f"""
