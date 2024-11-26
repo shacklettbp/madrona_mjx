@@ -1,4 +1,11 @@
-"""Variation of mjx testspeed for benchmarking batch renderings"""
+"""Benchmarking script for measuring throughput with MJX and BatchRenderer.
+
+This script is a variation of mjx testspeed with batch rendering integrated.
+
+Usage:
+    python benchmark.py --mjcf <path_to_mjcf> --num-worlds <num_worlds> \
+      --batch-render-view-width <width> --batch-render-view-height <height> [options]
+"""
 
 import os
 import time
@@ -24,7 +31,7 @@ arg_parser.add_argument('--gpu-id', type=int, default=0)
 arg_parser.add_argument('--num-worlds', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-width', type=int, required=True)
 arg_parser.add_argument('--batch-render-view-height', type=int, required=True)
-arg_parser.add_argument('--use-raytracer', action='store_true')
+arg_parser.add_argument('--use-rasterizer', action='store_true')
 
 arg_parser.add_argument('--nstep', type=int, default=1000)
 arg_parser.add_argument('--unroll', type=int, default=1)
@@ -81,7 +88,7 @@ def benchmark(
   renderer = BatchRenderer(
     m, gpu_id, batch_size, 
     batch_render_view_width, batch_render_view_width,
-    np.array([0, 1, 2]), False, args.use_raytracer,
+    np.array([0, 1, 2]), False, args.use_rasterizer,
     None)
 
   rng = jax.random.PRNGKey(seed=2)
@@ -118,6 +125,22 @@ def benchmark(
   v_randomization_fn = functools.partial(dr, rng=randomization_rng)
   
   v_mjx_model, v_in_axes = v_randomization_fn(m)
+
+  in_axes = jax.tree_util.tree_map(lambda x: None, sys)
+  in_axes = in_axes.tree_replace({
+      'geom_rgba': 0,
+      'geom_matid': 0,
+      'geom_size': 0,
+  })
+
+  sys = sys.tree_replace({
+    'geom_rgba': jp.repeat(
+      jp.expand_dims(sys.geom_rgba, 0), self.num_worlds, axis=0),
+    'geom_matid': jp.repeat(
+      jp.expand_dims(sys.geom_matid, 0), self.num_worlds, axis=0),
+    'geom_size': jp.repeat(
+      jp.expand_dims(sys.geom_size, 0), self.num_worlds, axis=0),
+  })
 
   def init(rng, sys):
     def init_(rng, sys):
@@ -164,7 +187,7 @@ if __name__ == '__main__':
       gpu_id=args.gpu_id,
       batch_render_view_width=args.batch_render_view_width,
       batch_render_view_height=args.batch_render_view_height,
-      use_raytracer=args.use_raytracer
+      use_raytracer=not args.use_rasterizer,
   )
 
   print(f"""

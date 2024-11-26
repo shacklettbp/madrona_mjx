@@ -112,7 +112,7 @@ class BatchRenderer:
       batch_render_view_height,
       enabled_geom_groups=np.array([0, 1, 2]),
       add_cam_debug_geo=False,
-      use_rt=False,
+      use_rasterizer=False,
       viz_gpu_hdls=None,
   ):
     mesh_verts = m.mesh_vert
@@ -179,7 +179,7 @@ class BatchRenderer:
         batch_render_view_height = batch_render_view_height,
         enabled_geom_groups = enabled_geom_groups,
         add_cam_debug_geo=add_cam_debug_geo,
-        use_rt=use_rt,
+        use_rt=not use_rasterizer,
         visualizer_gpu_handles = viz_gpu_hdls,
     )
 
