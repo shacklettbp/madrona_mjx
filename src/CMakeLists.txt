@@ -1,5 +1,5 @@
 set(SIMULATOR_SRCS
-    types.hpp sim.hpp sim.inl sim.cpp
+    types.hpp sim.hpp sim.inl sim.cpp geometry.hpp
 )
 
 add_library(madmjx_cpu_impl STATIC

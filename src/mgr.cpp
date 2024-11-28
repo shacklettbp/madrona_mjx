@@ -1,5 +1,6 @@
 #include "mgr.hpp"
 #include "sim.hpp"
+#include "geometry.hpp"
 
 #include <madrona/utils.hpp>
 #include <madrona/importer.hpp>
@@ -24,6 +25,7 @@ using namespace madrona;
 using namespace madrona::math;
 using namespace madrona::phys;
 using namespace madrona::py;
+using namespace madrona::imp;
 
 namespace madMJX {
 
@@ -407,31 +409,19 @@ static RTAssets loadRenderObjects(
     Optional<render::RenderManager> &render_mgr,
     bool use_rt)
 {
-    using namespace imp;
-
     StackAlloc tmp_alloc;
 
-    std::array<std::string, (size_t)RenderPrimObjectIDs::NumPrims> 
+    std::array<std::string, 1> 
         render_asset_paths;
     render_asset_paths[(size_t)RenderPrimObjectIDs::DebugCam] =
         (std::filesystem::path(DATA_DIR) / "debugcam.obj").string();
-    render_asset_paths[(size_t)RenderPrimObjectIDs::Plane] =
-        (std::filesystem::path(DATA_DIR) / "plane.obj").string();
-    render_asset_paths[(size_t)RenderPrimObjectIDs::Sphere] =
-        (std::filesystem::path(DATA_DIR) / "sphere.obj").string();
-    render_asset_paths[(size_t)RenderPrimObjectIDs::Box] =
-        (std::filesystem::path(DATA_DIR) / "box.obj").string();
-    render_asset_paths[(size_t)RenderPrimObjectIDs::Cylinder] =
-        (std::filesystem::path(DATA_DIR) / "cylinder.obj").string();
-    render_asset_paths[(size_t)RenderPrimObjectIDs::Capsule] =
-        (std::filesystem::path(DATA_DIR) / "capsule.obj").string();
 
     std::array<const char *, render_asset_paths.size()> render_asset_cstrs;
     for (size_t i = 0; i < render_asset_paths.size(); i++) {
         render_asset_cstrs[i] = render_asset_paths[i].c_str();
     }
 
-    imp::AssetImporter asset_importer;
+    AssetImporter asset_importer;
 
     std::array<char, 1024> import_err;
     auto disk_render_assets = asset_importer.importFromDisk(
@@ -441,13 +431,34 @@ static RTAssets loadRenderObjects(
         FATAL("Failed to load render assets from disk: %s", import_err);
     }
 
+    // Used to store the loaded geomentry data for pointers to remain valid
+    ImportedAssets generated_assets {
+        .geoData = ImportedAssets::GeometryData {
+            .positionArrays { 0 },
+            .normalArrays { 0 },
+            .tangentAndSignArrays { 0 },
+            .uvArrays { 0 },
+            .indexArrays { 0 },
+            .faceCountArrays { 0 },
+            .meshArrays { 0 },
+        },
+        .objects { 0 },
+        .materials { 0 },
+        .instances { 0 },
+        .textures { 0 },
+    };
+
     HeapArray<SourceMesh> meshes(
-        model.meshGeo.numMeshes + disk_render_assets->objects.size());
+        model.meshGeo.numMeshes + (size_t)RenderPrimObjectIDs::NumPrims);
     const CountT num_meshes = (CountT)model.meshGeo.numMeshes;
 
-    for (CountT i = 0; i < disk_render_assets->objects.size(); i++) {
-        meshes[i] = disk_render_assets->objects[i].meshes[0];
-    }
+    meshes[(size_t)RenderPrimObjectIDs::DebugCam] = 
+        disk_render_assets->objects[(size_t)RenderPrimObjectIDs::DebugCam].meshes[0];
+    meshes[(size_t)RenderPrimObjectIDs::Plane] = CreatePlane(generated_assets);
+    meshes[(size_t)RenderPrimObjectIDs::Sphere] = CreateSphere(generated_assets);
+    meshes[(size_t)RenderPrimObjectIDs::Box] = CreateBox(generated_assets);
+    meshes[(size_t)RenderPrimObjectIDs::Cylinder] = CreateCylinder(generated_assets);
+    meshes[(size_t)RenderPrimObjectIDs::Capsule] = CreateCapsule(generated_assets);
     
     for (CountT mesh_idx = 0; mesh_idx < num_meshes; mesh_idx++) {
         uint32_t mesh_vert_offset = model.meshGeo.vertexOffsets[mesh_idx];
@@ -462,7 +473,6 @@ static RTAssets loadRenderObjects(
         uint32_t mesh_num_tris = next_tri_offset - mesh_tri_offset;
         uint32_t mesh_idx_offset = mesh_tri_offset * 3;
 
-        
         math::Vector2 *uvs;
         if (model.meshGeo.texCoordOffsets[mesh_idx] != -1) {
             uvs = model.meshGeo.texCoords + model.meshGeo.texCoordOffsets[mesh_idx];
@@ -470,7 +480,7 @@ static RTAssets loadRenderObjects(
             uvs = nullptr;
         }
 
-        meshes[mesh_idx + disk_render_assets->objects.size()] = {
+        meshes[mesh_idx + (size_t)RenderPrimObjectIDs::NumPrims] = {
             .positions = model.meshGeo.vertices + mesh_vert_offset,
             .normals = nullptr,
             .tangentAndSigns = nullptr,
@@ -575,6 +585,7 @@ static RTAssets loadRenderObjects(
             FATAL("Unsupported geom type");
             break;
         }
+
         const SourceMesh& source_mesh = meshes[source_mesh_idx];
         dest_meshes[i] = {
             .positions = source_mesh.positions,
