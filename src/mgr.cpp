@@ -559,7 +559,7 @@ static RTAssets loadRenderObjects(
     HeapArray<SourceMesh> dest_meshes(model.numGeoms + 1);
     
     for (CountT i = 0; i < model.numGeoms; i++) {
-        int source_mesh_idx = 0;
+        int source_mesh_idx = -1;
         switch ((MJXGeomType)model.geomTypes[i]) {
         case MJXGeomType::Plane: {
             source_mesh_idx = (int)RenderPrimObjectIDs::Plane;
@@ -568,7 +568,10 @@ static RTAssets loadRenderObjects(
             source_mesh_idx = (int)RenderPrimObjectIDs::Sphere;
         } break;
         case MJXGeomType::Capsule: {
-            source_mesh_idx = (int)RenderPrimObjectIDs::Capsule;
+            dest_meshes[i] = CreateCapsule(
+                generated_assets,
+                model.geomSizes[i].x,
+                model.geomSizes[i].y * 2);
         } break;
         case MJXGeomType::Box: {
             source_mesh_idx = (int)RenderPrimObjectIDs::Box;
@@ -586,19 +589,21 @@ static RTAssets loadRenderObjects(
             break;
         }
 
-        const SourceMesh& source_mesh = meshes[source_mesh_idx];
-        dest_meshes[i] = {
-            .positions = source_mesh.positions,
-            .normals = source_mesh.normals,
-            .tangentAndSigns = source_mesh.tangentAndSigns,
-            .uvs = source_mesh.uvs,
-            .indices = source_mesh.indices,
-            .faceCounts = source_mesh.faceCounts,
-            .faceMaterials = source_mesh.faceMaterials,
-            .numVertices = source_mesh.numVertices,
-            .numFaces = source_mesh.numFaces,
-            .materialIDX = static_cast<uint32_t>(model.geomMatIDs[i]),
-        };
+        if (source_mesh_idx != -1) {
+            const SourceMesh& source_mesh = meshes[source_mesh_idx];
+            dest_meshes[i] = {
+                .positions = source_mesh.positions,
+                .normals = source_mesh.normals,
+                .tangentAndSigns = source_mesh.tangentAndSigns,
+                .uvs = source_mesh.uvs,
+                .indices = source_mesh.indices,
+                .faceCounts = source_mesh.faceCounts,
+                .faceMaterials = source_mesh.faceMaterials,
+                .numVertices = source_mesh.numVertices,
+                .numFaces = source_mesh.numFaces,
+                .materialIDX = static_cast<uint32_t>(model.geomMatIDs[i]),
+            };
+        }
 
         objs[i] = {
             .meshes = Span<SourceMesh>(&dest_meshes[i], 1),

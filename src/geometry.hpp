@@ -170,28 +170,31 @@ SourceMesh CreateBox(ImportedAssets &assets, float size = 1.0)
     return mesh;
 }
 
-SourceMesh CreateSphere(ImportedAssets &assets, float radius = 1.0, int num_lat = 16, int num_lon = 16)
+SourceMesh CreateSphere(
+    ImportedAssets &assets,
+    float radius = 1.0,
+    int subdivisions = 16)
 {
     DynArray<math::Vector3> positions(0);
-    positions.reserve((num_lon + 1) * (num_lat + 1));
     DynArray<math::Vector3> normals(0);
-    normals.reserve((num_lon + 1) * (num_lat + 1));
     DynArray<math::Vector2> uvs(0);
-    uvs.reserve((num_lon + 1) * (num_lat + 1));
     DynArray<uint32_t> indices(0);
-    indices.reserve(num_lon * num_lat * 6);
+    positions.reserve((subdivisions + 1) * (subdivisions + 1));
+    normals.reserve((subdivisions + 1) * (subdivisions + 1));
+    uvs.reserve((subdivisions + 1) * (subdivisions + 1));
+    indices.reserve(subdivisions * subdivisions * 6);
 
 
     // Create a sphere programmatically. Use triangles to create the faces.
-    for (int i = 0; i <= num_lat; i++)
+    for (int i = 0; i <= subdivisions; i++)
     {
-        float theta = (float)i * PI / (float)num_lat;
+        float theta = (float)i * PI / (float)subdivisions;
         float sin_theta = sin(theta);
         float cos_theta = cos(theta);
 
-        for (int j = 0; j <= num_lon; j++)
+        for (int j = 0; j <= subdivisions; j++)
         {
-            float phi = (float)j * 2 * PI / (float)num_lon;
+            float phi = (float)j * 2 * PI / (float)subdivisions;
             float sin_phi = sin(phi);
             float cos_phi = cos(phi);
 
@@ -205,16 +208,16 @@ SourceMesh CreateSphere(ImportedAssets &assets, float radius = 1.0, int num_lat 
 
             positions.push_back(math::Vector3(x, y, z));
             normals.push_back(math::Vector3(nx, ny, nz));
-            uvs.push_back(math::Vector2((float)j/num_lon, (float)i/num_lat));
+            uvs.push_back(math::Vector2((float)j/subdivisions, (float)i/subdivisions));
         }
     }
 
-    for (int i = 0; i < num_lat; i++)
+    for (int i = 0; i < subdivisions; i++)
     {
-        for (int j = 0; j < num_lon; j++)
+        for (int j = 0; j < subdivisions; j++)
         {
-            int first = i * (num_lon + 1) + j;
-            int second = first + num_lon + 1;
+            int first = i * (subdivisions + 1) + j;
+            int second = first + subdivisions + 1;
             indices.push_back(first);
             indices.push_back(first + 1);
             indices.push_back(second);
@@ -250,8 +253,7 @@ SourceMesh CreateCylinder(
     ImportedAssets &assets,
     float radius = 1.0,
     float height = 1.0,
-    int height_segments = 16,
-    int radial_segments = 16)
+    int subdivisions = 16)
 {
     // Use the above code to create a cylinder
     DynArray<math::Vector3> positions(0);
@@ -259,8 +261,8 @@ SourceMesh CreateCylinder(
     DynArray<math::Vector2> uvs(0);
     DynArray<uint32_t> indices(0);
 
-    int vertex_count = ((radial_segments + 1) * (height_segments + 1)) + (2 * (radial_segments + 1));
-    int index_count = radial_segments * height_segments * 6 + (radial_segments * 6);
+    int vertex_count = ((subdivisions + 1) * (subdivisions + 1)) + (2 * (subdivisions + 1));
+    int index_count = subdivisions * subdivisions * 6 + (subdivisions * 6);
 
     positions.reserve(vertex_count);
     normals.reserve(vertex_count);
@@ -268,10 +270,10 @@ SourceMesh CreateCylinder(
     indices.reserve(index_count);
 
     // Generate vertices, normals, and UVs for the side surface
-    for (int y = 0; y <= height_segments; ++y) {
-        for (int x = 0; x <= radial_segments; ++x) {
-            float x_seg = (float)x / radial_segments;
-            float y_seg = (float)y / height_segments;
+    for (int y = 0; y <= subdivisions; ++y) {
+        for (int x = 0; x <= subdivisions; ++x) {
+            float x_seg = (float)x / subdivisions;
+            float y_seg = (float)y / subdivisions;
 
             float vx = radius * cos(x_seg * 2.0f * PI);
             float vy = y_seg * height - height / 2.0f;
@@ -284,11 +286,11 @@ SourceMesh CreateCylinder(
     }
 
     // Generate indices for the side surface
-    for (int y = 0; y < height_segments; ++y) {
-        for (int x = 0; x < radial_segments; ++x) {
-            int current = y * (radial_segments + 1) + x;
+    for (int y = 0; y < subdivisions; ++y) {
+        for (int x = 0; x < subdivisions; ++x) {
+            int current = y * (subdivisions + 1) + x;
             int next = current + 1;
-            int next_row = current + radial_segments + 1;
+            int next_row = current + subdivisions + 1;
 
             indices.push_back(current);
             indices.push_back(next);
@@ -301,8 +303,8 @@ SourceMesh CreateCylinder(
     }
 
     // Generate vertices, normals, and UVs for the top cap
-    for (int x = 0; x <= radial_segments; ++x) {
-        float x_seg = (float)x / radial_segments;
+    for (int x = 0; x <= subdivisions; ++x) {
+        float x_seg = (float)x / subdivisions;
         float vx = radius * cos(x_seg * 2.0f * PI);
         float vy = height / 2.0f;
         float vz = radius * sin(x_seg * 2.0f * PI);
@@ -313,16 +315,16 @@ SourceMesh CreateCylinder(
     }
 
     // Generate indices for the top cap
-    int top_cap_index_offset = positions.size() - radial_segments - 1;
-    for (int x = 0; x < radial_segments; ++x) {
+    int top_cap_index_offset = positions.size() - subdivisions - 1;
+    for (int x = 0; x < subdivisions; ++x) {
         indices.push_back(top_cap_index_offset);
         indices.push_back(top_cap_index_offset + x);
         indices.push_back(top_cap_index_offset + x + 1);
     }
 
     // Generate vertices, normals, and UVs for the bottom cap
-    for (int x = 0; x <= radial_segments; ++x) {
-        float x_seg = (float)x / radial_segments;
+    for (int x = 0; x <= subdivisions; ++x) {
+        float x_seg = (float)x / subdivisions;
         float vx = radius * cos(x_seg * 2.0f * PI);
         float vy = -height / 2.0f;
         float vz = radius * sin(x_seg * 2.0f * PI);
@@ -333,8 +335,8 @@ SourceMesh CreateCylinder(
     }
 
     // Generate indices for the bottom cap
-    int bottom_cap_index_offset = positions.size() - radial_segments - 1;
-    for (int x = 0; x < radial_segments; ++x) {
+    int bottom_cap_index_offset = positions.size() - subdivisions - 1;
+    for (int x = 0; x < subdivisions; ++x) {
         indices.push_back(bottom_cap_index_offset + x);
         indices.push_back(bottom_cap_index_offset);
         indices.push_back(bottom_cap_index_offset + x + 1);
@@ -365,28 +367,23 @@ SourceMesh CreateCapsule(
     ImportedAssets &assets,
     float radius = 1.0,
     float height = 1.0,
-    int num_lat = 16,
-    int num_lon = 16)
+    int subdivisions = 16)
 {
     DynArray<math::Vector3> positions(0);
-    // positions.reserve((num_lon + 1) * (num_lat + 1));
     DynArray<math::Vector3> normals(0);
-    // normals.reserve((num_lon + 1) * (num_lat + 1));
     DynArray<math::Vector2> uvs(0);
-    // uvs.reserve((num_lon + 1) * (num_lat + 1));
     DynArray<uint32_t> indices(0);
-    // indices.reserve(num_lon * num_lat * 6);
 
     // Top Sphere
-    for (int i = 0; i <= num_lat; i++)
+    for (int i = 0; i <= subdivisions; i++)
     {
-        float theta = (float)i * PI / ((float)num_lat * 2);
+        float theta = (float)i * PI / ((float)subdivisions * 2);
         float sin_theta = sin(theta);
         float cos_theta = cos(theta);
 
-        for (int j = 0; j <= num_lon; j++)
+        for (int j = 0; j <= subdivisions; j++)
         {
-            float phi = (float)j * 2 * PI / (float)num_lon;
+            float phi = (float)j * 2 * PI / (float)subdivisions;
             float sin_phi = sin(phi);
             float cos_phi = cos(phi);
 
@@ -400,16 +397,16 @@ SourceMesh CreateCapsule(
 
             positions.push_back(math::Vector3(x, z, y));
             normals.push_back(math::Vector3(nx, nz, ny));
-            uvs.push_back(math::Vector2((float)j/num_lon, (float)i/(2 * num_lat)));
+            uvs.push_back(math::Vector2((float)j/subdivisions, (float)i/(2 * subdivisions)));
         }
     }
 
-    for (int i = 0; i < num_lat; i++)
+    for (int i = 0; i < subdivisions; i++)
     {
-        for (int j = 0; j < num_lon; j++)
+        for (int j = 0; j < subdivisions; j++)
         {
-            int first = i * (num_lon + 1) + j;
-            int second = first + num_lon + 1;
+            int first = i * (subdivisions + 1) + j;
+            int second = first + subdivisions + 1;
             indices.push_back(first);
             indices.push_back(second);
             indices.push_back(first + 1);
@@ -421,15 +418,15 @@ SourceMesh CreateCapsule(
     }
 
     // Bottom Sphere
-    for (int i = 0; i <= num_lat; i++)
+    for (int i = 0; i <= subdivisions; i++)
     {
-        float theta = (float)i * PI / ((float)num_lat * 2);
+        float theta = (float)i * PI / ((float)subdivisions * 2);
         float sin_theta = sin(theta);
         float cos_theta = cos(theta);
 
-        for (int j = 0; j <= num_lon; j++)
+        for (int j = 0; j <= subdivisions; j++)
         {
-            float phi = (float)j * 2 * PI / (float)num_lon;
+            float phi = (float)j * 2 * PI / (float)subdivisions;
             float sin_phi = sin(phi);
             float cos_phi = cos(phi);
 
@@ -443,17 +440,17 @@ SourceMesh CreateCapsule(
 
             positions.push_back(math::Vector3(x, z, y));
             normals.push_back(math::Vector3(nx, nz, ny));
-            uvs.push_back(math::Vector2((float)j/num_lon, (float)i/(2 * num_lat)));
+            uvs.push_back(math::Vector2((float)j/subdivisions, (float)i/(2 * subdivisions)));
         }
     }
 
     int bottomSphereIndex = positions.size() / 2;
-    for (int i = 0; i < num_lat; i++)
+    for (int i = 0; i < subdivisions; i++)
     {
-        for (int j = 0; j < num_lon; j++)
+        for (int j = 0; j < subdivisions; j++)
         {
-            int first = i * (num_lon + 1) + j + bottomSphereIndex;
-            int second = first + num_lon + 1;
+            int first = i * (subdivisions + 1) + j + bottomSphereIndex;
+            int second = first + subdivisions + 1;
             indices.push_back(first);
             indices.push_back(first + 1);
             indices.push_back(second);
@@ -464,14 +461,11 @@ SourceMesh CreateCapsule(
         }
     }
 
-    int height_segments = 16;
-    int radial_segments = 16;
-
     // Generate vertices, normals, and UVs for the side surface
-    for (int y = 0; y <= height_segments; ++y) {
-        for (int x = 0; x <= radial_segments; ++x) {
-            float x_seg = (float)x / radial_segments;
-            float y_seg = (float)y / height_segments;
+    for (int y = 0; y <= subdivisions; ++y) {
+        for (int x = 0; x <= subdivisions; ++x) {
+            float x_seg = (float)x / subdivisions;
+            float y_seg = (float)y / subdivisions;
 
             float vx = radius * cos(x_seg * 2.0f * PI);
             float vy = y_seg * height - height / 2.0f;
@@ -485,11 +479,11 @@ SourceMesh CreateCapsule(
 
     int postSphereIndex = bottomSphereIndex * 2;
     // Generate indices for the side surface
-    for (int y = 0; y < height_segments; ++y) {
-        for (int x = 0; x < radial_segments; ++x) {
-            int current = y * (radial_segments + 1) + x + postSphereIndex;
+    for (int y = 0; y < subdivisions; ++y) {
+        for (int x = 0; x < subdivisions; ++x) {
+            int current = y * (subdivisions + 1) + x + postSphereIndex;
             int next = current + 1;
-            int next_row = current + radial_segments + 1;
+            int next_row = current + subdivisions + 1;
 
             indices.push_back(current);
             indices.push_back(next);

@@ -125,8 +125,7 @@ class BatchRenderer:
     geom_types = m.geom_type
     geom_groups = m.geom_group
     geom_data_ids = m.geom_dataid
-    geom_sizes = self.adjust_scale(m.geom_size, geom_types)
-    geom_sizes = jax.device_get(geom_sizes)
+    geom_sizes = jax.device_get(m.geom_size)
     geom_mat_ids = jax.device_get(m.geom_matid)
     geom_rgba = jax.device_get(m.geom_rgba)
     mat_rgba = jax.device_get(m.mat_rgba)
@@ -215,14 +214,30 @@ class BatchRenderer:
     '''Returns the adjusted madrona scale of the geometry based on geom_type.'''
     def adjust(size, gtype):
       x, y, z = size
-      size = size.at[:].set(jp.where(gtype == 0, jp.array([x, y, 1], jp.float32), size))
-      size = size.at[:].set(jp.where(gtype == 1, jp.array([1, 1, 1], jp.float32), size))
-      size = size.at[:].set(jp.where(gtype == 2, jp.array([x, x, x], jp.float32), size))
-      size = size.at[:].set(jp.where(gtype == 3, jp.array([x, x, y], jp.float32), size))
-      size = size.at[:].set(jp.where(gtype == 4, jp.array([1, 1, 1], jp.float32), size))
-      size = size.at[:].set(jp.where(gtype == 5, jp.array([x, x, y], jp.float32), size))
-      size = size.at[:].set(jp.where(gtype == 6, jp.array([x*2, y*2, z*2], jp.float32), size))
-      size = size.at[:].set(jp.where(gtype == 7, jp.array([1, 1, 1], jp.float32), size))
+      # Plane
+      size = size.at[:].set(
+        jp.where(gtype == 0, jp.array([x*2, y*2, 1], jp.float32), size))
+      # Heightfields - Currently not supported
+      size = size.at[:].set(
+        jp.where(gtype == 1, jp.array([1, 1, 1], jp.float32), size))
+      # Sphere
+      size = size.at[:].set(
+        jp.where(gtype == 2, jp.array([x, x, x], jp.float32), size))
+      # Capsule - Resize not supported
+      size = size.at[:].set(
+        jp.where(gtype == 3, jp.array([1, 1, 1], jp.float32), size))
+      # Ellipsoid - Currently not supported
+      size = size.at[:].set(
+        jp.where(gtype == 4, jp.array([1, 1, 1], jp.float32), size))
+      # Cylinder
+      size = size.at[:].set(
+        jp.where(gtype == 5, jp.array([x, y, 1], jp.float32), size))
+      # Box
+      size = size.at[:].set(
+        jp.where(gtype == 6, jp.array([x*2, y*2, z*2], jp.float32), size))
+      # Mesh - Resize not supported
+      size = size.at[:].set(
+        jp.where(gtype == 7, jp.array([1, 1, 1], jp.float32), size))
       return size
     
     return jax.vmap(adjust)(geom_size, geom_type)
