@@ -572,6 +572,7 @@ static RTAssets loadRenderObjects(
                 generated_assets,
                 model.geomSizes[i].x,
                 model.geomSizes[i].y * 2);
+            dest_meshes[i].materialIDX = static_cast<uint32_t>(model.geomMatIDs[i]);
         } break;
         case MJXGeomType::Box: {
             source_mesh_idx = (int)RenderPrimObjectIDs::Box;
