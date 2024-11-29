@@ -234,7 +234,7 @@ class BatchRenderer:
         jp.where(gtype == 5, jp.array([x, y, 1], jp.float32), size))
       # Box
       size = size.at[:].set(
-        jp.where(gtype == 6, jp.array([x*2, y*2, z*2], jp.float32), size))
+        jp.where(gtype == 6, jp.array([x, y, z], jp.float32), size))
       # Mesh - Resize not supported
       size = size.at[:].set(
         jp.where(gtype == 7, jp.array([1, 1, 1], jp.float32), size))
