@@ -75,6 +75,7 @@ and color of the floor.
 
 ## Important tips
 
+- USE CACHE
 - A camera must be included in the mjcf
 - Domain randimization must include the correct setting of geom_rgba, geom_size, and geom_matid. Please see the viewer for an example.
 - Only one renderer can be initialized at a time. This means two environments cannot be created that both use their own batch renderer instances. (e.g. train/eval)
