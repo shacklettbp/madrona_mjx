@@ -103,6 +103,11 @@ struct JAXIO {
     Diag3x3 *geomSizes;
     int32_t *matIDs;
     uint32_t *geomRGB;
+    Vector3 *lightPos;
+    Vector3 *lightDir;
+    bool *lightIsDir;
+    bool *lightCastShadow;
+    float *lightCutoff;
 
     uint8_t *rgbOut;
     float *depthOut;
@@ -117,6 +122,11 @@ struct JAXIO {
         auto mat_ids = (int32_t *)buffers[buf_idx++];
         auto geom_rgb = (uint32_t *)buffers[buf_idx++];
         auto geom_sizes = (Diag3x3 *)buffers[buf_idx++];
+        auto light_pos = (Vector3 *)buffers[buf_idx++];
+        auto light_dir = (Vector3 *)buffers[buf_idx++];
+        auto light_isdir = (bool *)buffers[buf_idx++];
+        auto light_castshadow = (bool *)buffers[buf_idx++];
+        auto light_cutoff = (float *)buffers[buf_idx++];
         auto rgb_out = (uint8_t *)buffers[buf_idx++];
         auto depth_out = (float *)buffers[buf_idx++];
 
@@ -128,6 +138,11 @@ struct JAXIO {
             .geomSizes = geom_sizes,
             .matIDs = mat_ids,
             .geomRGB = geom_rgb,
+            .lightPos = light_pos,
+            .lightDir = light_dir,
+            .lightIsDir = light_isdir,
+            .lightCastShadow = light_castshadow,
+            .lightCutoff = light_cutoff,
             .rgbOut = rgb_out,
             .depthOut = depth_out,
         };
@@ -151,6 +166,11 @@ struct JAXIO {
             .geomSizes = nullptr,
             .matIDs = nullptr,
             .geomRGB = nullptr,
+            .lightPos = nullptr,
+            .lightDir = nullptr,
+            .lightIsDir = nullptr,
+            .lightCastShadow = nullptr,
+            .lightCutoff = nullptr,
             .rgbOut = rgb_out,
             .depthOut = depth_out,
         };
@@ -240,6 +260,11 @@ struct Manager::Impl {
         Diag3x3 *geom_sizes,
         int32_t *mat_overrides,
         uint32_t *col_overrides,
+        Vector3 *light_pos,
+        Vector3 *light_dir,
+        bool *light_isdir,
+        bool *light_castshadow,
+        float *light_cutoff,
         cudaStream_t strm)
     {
         cudaMemcpyAsync(
@@ -257,6 +282,35 @@ struct Manager::Impl {
             geom_sizes,
             sizeof(Diag3x3) * numGeoms * cfg.numWorlds,
             cudaMemcpyDeviceToDevice, strm);
+
+        if (cfg.useRT)
+        {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::LightPositions),
+                light_pos,
+                sizeof(Vector3) * cfg.numWorlds,
+                cudaMemcpyDeviceToDevice, strm);
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::LightDirections),
+                light_dir,
+                sizeof(Vector3) * cfg.numWorlds,
+                cudaMemcpyDeviceToDevice, strm);
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::LightTypes),
+                light_isdir,
+                sizeof(bool) * cfg.numWorlds,
+                cudaMemcpyDeviceToDevice, strm);
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::LightShadows),
+                light_castshadow,
+                sizeof(bool) * cfg.numWorlds,
+                cudaMemcpyDeviceToDevice, strm);
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::LightCutoffAngles),
+                light_cutoff,
+                sizeof(float) * cfg.numWorlds,
+                cudaMemcpyDeviceToDevice, strm);
+        }
     }
 
     inline void init(Vector3 *geom_positions,
@@ -265,7 +319,12 @@ struct Manager::Impl {
                      Quat *cam_rotations,
                      int32_t *mat_ids,
                      uint32_t *geom_rgb,
-                     Diag3x3 *geom_sizes)
+                     Diag3x3 *geom_sizes,
+                     Vector3 *light_pos,
+                     Vector3 *light_dir,
+                     bool *light_isdir,
+                     bool *light_castshadow,
+                     float *light_cutoff)
     {
         MWCudaLaunchGraph init_graph =
             gpuExec.buildLaunchGraph(TaskGraphID::Init);
@@ -277,7 +336,8 @@ struct Manager::Impl {
 
         copyInTransforms(geom_positions, geom_rotations,
                          cam_positions, cam_rotations, 0);
-        copyInProperties(geom_sizes, mat_ids, geom_rgb, 0);
+        copyInProperties(geom_sizes, mat_ids, geom_rgb, light_pos, light_dir,
+            light_isdir, light_castshadow, light_cutoff, 0);
 
         gpuExec.run(render_init_graph);
         renderImpl();
@@ -346,9 +406,23 @@ struct Manager::Impl {
 
         gpuExec.runAsync(init_graph, strm);
 
-        copyInTransforms(jax_io.geomPositions, jax_io.geomRotations,
-                         jax_io.camPositions, jax_io.camRotations, strm);
-        copyInProperties(jax_io.geomSizes, jax_io.matIDs, jax_io.geomRGB, strm);
+        copyInTransforms(
+            jax_io.geomPositions,
+            jax_io.geomRotations,
+            jax_io.camPositions,
+            jax_io.camRotations,
+            strm);
+        
+        copyInProperties(
+            jax_io.geomSizes,
+            jax_io.matIDs,
+            jax_io.geomRGB,
+            jax_io.lightPos,
+            jax_io.lightDir,
+            jax_io.lightIsDir,
+            jax_io.lightCastShadow,
+            jax_io.lightCutoff,
+            strm);
 
         gpuExec.runAsync(render_init_graph, strm);
 
@@ -779,9 +853,14 @@ Manager::~Manager() {}
 void Manager::init(math::Vector3 *geom_pos, math::Quat *geom_rot,
                    math::Vector3 *cam_pos, math::Quat *cam_rot,
                    int32_t *mat_ids, uint32_t *geom_rgb,
-                   math::Diag3x3 *geom_sizes)
+                   math::Diag3x3 *geom_sizes, math::Vector3 *light_pos,
+                   math::Vector3 *light_dir, bool *light_isdir,
+                   bool *light_castshadow, float *light_cutoff)
 {
-    impl_->init(geom_pos, geom_rot, cam_pos, cam_rot, mat_ids, geom_rgb, geom_sizes);
+    impl_->init(
+        geom_pos, geom_rot, cam_pos, cam_rot, mat_ids, geom_rgb, geom_sizes,
+        light_pos, light_dir, light_isdir, light_castshadow, 
+        light_cutoff);
 }
 
 void Manager::render(math::Vector3 *geom_pos, math::Quat *geom_rot,

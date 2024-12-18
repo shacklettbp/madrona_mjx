@@ -130,7 +130,11 @@ class BatchRenderer:
     geom_rgba = jax.device_get(m.geom_rgba)
     mat_rgba = jax.device_get(m.mat_rgba)
     light_mode = m.light_mode
-    light_isdir = m.light_directional
+    light_active = jax.device_get(m.light_active)
+    light_isdir = jax.device_get(m.light_directional)
+    light_castshadow = jax.device_get(m.light_castshadow)
+    light_cutoff = jax.device_get(m.light_cutoff)
+    light_intensity = jax.device_get(m.light_exponent)
     light_pos = jax.device_get(m.light_pos)
     light_dir = jax.device_get(m.light_dir)
     # TODO: filter for camera ids
@@ -265,7 +269,12 @@ class BatchRenderer:
         cam_quat,
         model.geom_matid,
         rgb_uint32,
-        geom_size)
+        geom_size,
+        model.light_pos,
+        model.light_dir,
+        model.light_directional,
+        model.light_castshadow,
+        model.light_cutoff)
 
     return render_token, init_rgb, init_depth
 

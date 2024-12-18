@@ -90,7 +90,13 @@ public:
                          madrona::math::Quat *cam_rot,
                          int32_t *mat_ids,
                          uint32_t *geom_rgb,
-                         madrona::math::Diag3x3 *geom_sizes);
+                         madrona::math::Diag3x3 *geom_sizes,
+                         madrona::math::Vector3 *light_pos,
+                         madrona::math::Vector3 *light_dir,
+                         bool *light_isdir,
+                         bool *light_castshadow,
+                         float *light_cutoff);
+    
     MGR_EXPORT void render(madrona::math::Vector3 *geom_pos,
                            madrona::math::Quat *geom_rot,
                            madrona::math::Vector3 *cam_pos,

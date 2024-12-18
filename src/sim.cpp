@@ -18,6 +18,7 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     RenderingSystem::registerTypes(registry, cfg.renderBridge);
 
     registry.registerArchetype<RenderEntity>();
+    registry.registerArchetype<LightEntity>();
 
     registry.exportColumn<RenderEntity, Position>(
         (uint32_t)ExportID::InstancePositions);
@@ -29,7 +30,18 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
         (uint32_t)ExportID::InstanceMatOverrides);
     registry.exportColumn<RenderEntity, ColorOverride>( 
         (uint32_t)ExportID::InstanceColorOverrides);
-    
+
+    registry.exportColumn<LightEntity, Position>(
+        (uint32_t)ExportID::LightPositions);
+    registry.exportColumn<LightEntity, render::LightDescDirection>(
+        (uint32_t)ExportID::LightDirections);
+    registry.exportColumn<LightEntity, render::LightDescType>(
+        (uint32_t)ExportID::LightTypes);
+    registry.exportColumn<LightEntity, render::LightDescShadow>(
+        (uint32_t)ExportID::LightShadows);
+    registry.exportColumn<LightEntity, render::LightDescCutoffAngle>(
+        (uint32_t)ExportID::LightCutoffAngles);
+     
     if (cfg.useDebugCamEntity) {
         registry.registerArchetype<DebugCameraEntity>();
 
@@ -130,7 +142,7 @@ Sim::Sim(Engine &ctx,
         }
         else {
             instance = ctx.makeRenderableEntity<RenderEntity>();
-            ctx.get<ObjectID>(instance) = ObjectID { cfg.geomDataIDs[geom_idx] };
+            ctx.get<ObjectID>(instance)  = ObjectID { cfg.geomDataIDs[geom_idx] };
         }
 
         ctx.get<Position>(instance) = Vector3::zero();
@@ -158,16 +170,16 @@ Sim::Sim(Engine &ctx,
         render::RenderingSystem::attachEntityToView(
             ctx, cam, 60.f, 0.001f, Vector3::zero());
     }
+    
+    Entity light = ctx.makeEntity<LightEntity>();
 
-    Entity light = render::RenderingSystem::makeLight(ctx);
-    render::RenderingSystem::configureLight(ctx, light, render::LightDesc {
-        .type = render::LightDesc::Type::Directional,
-        .castShadow = false,
-        .position = Vector3::zero(),
-        .direction = Vector3 { 0, 0, -1 },
-        .cutoff = 0.78539816339f,
-        .active = true
-    });
+    ctx.get<render::LightDescType>(light).type = render::LightDesc::Type::Directional;
+    ctx.get<render::LightDescShadow>(light).castShadow = false;
+    ctx.get<render::LightDescDirection>(light) = Vector3{-1.f, -1.f, -1.8f};
+    ctx.get<render::LightDescIntensity>(light).intensity = 3.f;
+    ctx.get<render::LightDescActive>(light).active = true;
+
+    RenderingSystem::makeEntityLightCarrier(ctx, light);
 }
 
 // This declaration is needed for the GPU backend in order to generate the

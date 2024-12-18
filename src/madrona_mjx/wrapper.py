@@ -29,6 +29,11 @@ def dummy_tile(sys: System, num_worlds: int) -> Tuple[System, System]:
       'geom_rgba': 0,
       'geom_matid': 0,
       'geom_size': 0,
+      'light_pos': 0,
+      'light_dir': 0,
+      'light_directional': 0,
+      'light_castshadow': 0,
+      'light_cutoff': 0,
   })
 
   sys = sys.tree_replace({
@@ -38,6 +43,16 @@ def dummy_tile(sys: System, num_worlds: int) -> Tuple[System, System]:
       jp.expand_dims(sys.geom_matid, 0), num_worlds, axis=0),
     'geom_size': jp.repeat(
       jp.expand_dims(sys.geom_size, 0), num_worlds, axis=0),
+    'light_pos': jp.repeat(
+      jp.expand_dims(sys.light_pos, 0), num_worlds, axis=0),
+    'light_dir': jp.repeat(
+      jp.expand_dims(sys.light_dir, 0), num_worlds, axis=0),
+    'light_directional': jp.repeat(
+      jp.expand_dims(sys.light_directional, 0), num_worlds, axis=0),
+    'light_castshadow': jp.repeat(
+      jp.expand_dims(sys.light_castshadow, 0), num_worlds, axis=0),
+    'light_cutoff': jp.repeat(
+      jp.expand_dims(sys.light_cutoff, 0), num_worlds, axis=0),
   })
 
   return sys, in_axes

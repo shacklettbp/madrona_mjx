@@ -171,7 +171,12 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
                         nb::ndarray<const float, nb::shape<-1, -1, 4>> cam_rot,
                         nb::ndarray<const int32_t, nb::shape<-1, -1>> mat_ids,
                         nb::ndarray<const uint32_t, nb::shape<-1, -1>> geom_rgb,
-                        nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_sizes)
+                        nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_sizes,
+                        nb::ndarray<const float, nb::shape<-1, 3>> light_pos,
+                        nb::ndarray<const float, nb::shape<-1, 3>> light_dir,
+                        nb::ndarray<const bool, nb::shape<-1>> light_isdir,
+                        nb::ndarray<const bool, nb::shape<-1>> light_castshadow,
+                        nb::ndarray<const float, nb::shape<-1>> light_cutoff)
 
         {
             mgr.init((math::Vector3 *)geom_pos.data(),
@@ -180,7 +185,12 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
                      (math::Quat *)cam_rot.data(),
                      (int32_t *)mat_ids.data(),
                      (uint32_t *)geom_rgb.data(),
-                     (math::Diag3x3 *)geom_sizes.data());
+                     (math::Diag3x3 *)geom_sizes.data(),
+                     (math::Vector3 *)light_pos.data(),
+                     (math::Vector3 *)light_dir.data(),
+                     (bool *)light_isdir.data(),
+                     (bool *)light_castshadow.data(),
+                     (float *)light_cutoff.data());
         })
         .def("render", [](Manager &mgr,
                           nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_pos,

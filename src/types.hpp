@@ -43,6 +43,17 @@ enum class MJXGeomType : uint32_t {
     Mesh        = 7,
 };
 
+struct LightEntity : public madrona::Archetype<
+    Position,
+    madrona::render::LightDescDirection,
+    madrona::render::LightDescType,
+    madrona::render::LightDescShadow,
+    madrona::render::LightDescCutoffAngle,
+    madrona::render::LightDescIntensity,
+    madrona::render::LightDescActive,
+    madrona::render::LightCarrier
+> {};
+
 struct RenderEntity : public madrona::Archetype<
     ObjectInstance,
     madrona::render::MaterialOverride,
