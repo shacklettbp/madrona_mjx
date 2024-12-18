@@ -42,7 +42,7 @@ viz_gpu_state = VisualizerGPUState(
 
 def limit_jax_mem(limit):
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = f"{limit:.2f}"
-limit_jax_mem(0.05)
+limit_jax_mem(0.1)
 
 # Tell XLA to use Triton GEMM
 xla_flags = os.environ.get('XLA_FLAGS', '')
@@ -76,21 +76,41 @@ def domain_randomize(sys, rng):
     new_size = jax.random.uniform(color_rng, (3,), minval=1, maxval=5)
     geom_size = sys.geom_size.at[0, 0:3].set(new_size)
 
-    return geom_rgba, geom_matid, geom_size
+    # Lighting randomization
+    new_light_pos = jax.random.uniform(
+      rng, (3,),
+      minval=jp.asarray([-0.2, -0.2, 2]),
+      maxval=jp.asarray([0.2, 0.2, 2]))
+    light_pos = sys.light_pos.at[:].set(new_light_pos)
+    light_dir = sys.light_dir.at[:].set(jp.asarray([0, 0, -1]))
+    light_directional = sys.light_directional.at[:].set(False)
+    light_castshadow = sys.light_castshadow.at[:].set(True)
+    light_cutoff = sys.light_cutoff.at[:].set(jax.random.uniform(rng, (1,), minval=1, maxval=1.5))
+    return geom_rgba, geom_matid, geom_size, light_pos, light_dir, light_directional, light_castshadow, light_cutoff
 
-  geom_rgba, geom_matid, geom_size = rand(rng)
+  geom_rgba, geom_matid, geom_size, light_pos, light_dir, light_directional, light_castshadow, light_cutoff = rand(rng)
 
   in_axes = jax.tree_util.tree_map(lambda x: None, sys)
   in_axes = in_axes.tree_replace({
       'geom_rgba': 0,
       'geom_matid': 0,
       'geom_size': 0,
+      'light_pos': 0,
+      'light_dir': 0,
+      'light_directional': 0,
+      'light_castshadow': 0,
+      'light_cutoff': 0,
   })
 
   sys = sys.tree_replace({
       'geom_rgba': geom_rgba,
       'geom_matid': geom_matid,
       'geom_size': geom_size,
+      'light_pos': light_pos,
+      'light_dir': light_dir,
+      'light_directional': light_directional,
+      'light_castshadow': light_castshadow,
+      'light_cutoff': light_cutoff,
   })
 
   return sys, in_axes
