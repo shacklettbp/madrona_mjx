@@ -1,1 +1,2 @@
-from madrona_mjx._madrona_mjx_visualizer import VisualizerGPUState, Visualizer
+from madrona_mjx._madrona_mjx_visualizer import Visualizer
+from madrona_mjx._madrona_mjx_visualizer import VisualizerGPUState

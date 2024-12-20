@@ -1,14 +1,16 @@
 """Custom wrappers that extend Brax wrappers"""
 
-from typing import Callable, Optional, Tuple
-from etils import epath
 import functools
+from typing import Callable, Optional, Tuple
 
+from brax.base import System
+from brax.envs.base import Env
+from brax.envs.base import State
+from brax.envs.base import Wrapper
+from etils import epath
 import jax
 from jax import numpy as jp
 import mujoco
-from brax.base import System
-from brax.envs.base import Env, State, Wrapper
 
 
 def load_model(path: str):
@@ -23,7 +25,9 @@ def load_model(path: str):
   return model
 
 
-def _identity_randomization_fn(sys: System, num_worlds: int) -> Tuple[System, System]:
+def _identity_randomization_fn(
+    sys: System, num_worlds: int
+) -> Tuple[System, System]:
   """Tile the necessary axes for the Madrona BatchRenderer."""
   in_axes = jax.tree_util.tree_map(lambda x: None, sys)
   in_axes = in_axes.tree_replace({
@@ -38,22 +42,30 @@ def _identity_randomization_fn(sys: System, num_worlds: int) -> Tuple[System, Sy
   })
 
   sys = sys.tree_replace({
-    'geom_rgba': jp.repeat(
-      jp.expand_dims(sys.geom_rgba, 0), num_worlds, axis=0),
-    'geom_matid': jp.repeat(
-      jp.expand_dims(sys.geom_matid, 0), num_worlds, axis=0),
-    'geom_size': jp.repeat(
-      jp.expand_dims(sys.geom_size, 0), num_worlds, axis=0),
-    'light_pos': jp.repeat(
-      jp.expand_dims(sys.light_pos, 0), num_worlds, axis=0),
-    'light_dir': jp.repeat(
-      jp.expand_dims(sys.light_dir, 0), num_worlds, axis=0),
-    'light_directional': jp.repeat(
-      jp.expand_dims(sys.light_directional, 0), num_worlds, axis=0),
-    'light_castshadow': jp.repeat(
-      jp.expand_dims(sys.light_castshadow, 0), num_worlds, axis=0),
-    'light_cutoff': jp.repeat(
-      jp.expand_dims(sys.light_cutoff, 0), num_worlds, axis=0),
+      'geom_rgba': jp.repeat(
+          jp.expand_dims(sys.geom_rgba, 0), num_worlds, axis=0
+      ),
+      'geom_matid': jp.repeat(
+          jp.expand_dims(sys.geom_matid, 0), num_worlds, axis=0
+      ),
+      'geom_size': jp.repeat(
+          jp.expand_dims(sys.geom_size, 0), num_worlds, axis=0
+      ),
+      'light_pos': jp.repeat(
+          jp.expand_dims(sys.light_pos, 0), num_worlds, axis=0
+      ),
+      'light_dir': jp.repeat(
+          jp.expand_dims(sys.light_dir, 0), num_worlds, axis=0
+      ),
+      'light_directional': jp.repeat(
+          jp.expand_dims(sys.light_directional, 0), num_worlds, axis=0
+      ),
+      'light_castshadow': jp.repeat(
+          jp.expand_dims(sys.light_castshadow, 0), num_worlds, axis=0
+      ),
+      'light_cutoff': jp.repeat(
+          jp.expand_dims(sys.light_cutoff, 0), num_worlds, axis=0
+      ),
   })
 
   return sys, in_axes
@@ -61,25 +73,28 @@ def _identity_randomization_fn(sys: System, num_worlds: int) -> Tuple[System, Sy
 
 class MadronaWrapper(Wrapper):
   """Wrapper to Vmap an environment that uses the Madrona BatchRenderer.
-  
-  Madrona expects certain MjModel axes to be batched so that the buffers can 
+
+  Madrona expects certain MjModel axes to be batched so that the buffers can
   be copied to the GPU. Therefore we need to dummy batch the model to create
-  the correct sized buffers for those not using randomization functions, 
+  the correct sized buffers for those not using randomization functions,
   and for those using randomization we ensure the correct axes are batched.
-  
+
   Use this instead of the Brax VmapWrapper and DomainRandimzationWrapper."""
 
   def __init__(
       self,
       env: Env,
       num_worlds,
-      randomization_fn: Optional[Callable[[System], Tuple[System, System]]] = None,
+      randomization_fn: Optional[
+          Callable[[System], Tuple[System, System]]
+      ] = None,
   ):
     super().__init__(env)
     self.num_worlds = num_worlds
     if not randomization_fn:
       randomization_fn = functools.partial(
-          _identity_randomization_fn, num_worlds=num_worlds)
+          _identity_randomization_fn, num_worlds=num_worlds
+      )
 
     self._sys_v, self._in_axes = randomization_fn(self.sys)
     # For user-made DR functions, ensure that the output model includes the
