@@ -7,23 +7,23 @@ Usage:
       --batch-render-view-width <width> --batch-render-view-height <height> [options]
 """
 
+import argparse
+import functools
 import os
 import time
 from typing import Tuple
+
+from etils import epath
 import jax
 import jax.numpy as jp
-import numpy as np
 import mujoco
 from mujoco import mjx
-from mujoco.mjx._src.test_util import _measure
-from mujoco.mjx._src import io
 from mujoco.mjx._src import forward
-from etils import epath
-import functools
+from mujoco.mjx._src import io
+from mujoco.mjx._src.test_util import _measure
+import numpy as np
 
 from madrona_mjx.renderer import BatchRenderer
-
-import argparse
 
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('--mjcf', type=str, required=True)
@@ -35,7 +35,9 @@ arg_parser.add_argument('--use-rasterizer', action='store_true')
 
 arg_parser.add_argument('--nstep', type=int, default=1000)
 arg_parser.add_argument('--unroll', type=int, default=1)
-arg_parser.add_argument('--solver', type=str, default='newton', choices=['cg', 'newton'])
+arg_parser.add_argument(
+    '--solver', type=str, default='newton', choices=['cg', 'newton']
+)
 arg_parser.add_argument('--iterations', type=int, default=1)
 arg_parser.add_argument('--ls_iterations', type=int, default=4)
 
@@ -43,7 +45,9 @@ args = arg_parser.parse_args()
 
 
 def limit_jax_mem(limit):
-    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = f"{limit:.2f}"
+  os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = f'{limit:.2f}'
+
+
 limit_jax_mem(0.2)
 
 
@@ -57,6 +61,7 @@ def load_model(path: str):
       assets[f.name] = f.read_bytes()
   model = mujoco.MjModel.from_xml_string(xml, assets)
   return model
+
 
 def benchmark(
     m: mujoco.MjModel,
@@ -86,16 +91,23 @@ def benchmark(
   m = io.put_model(m)
 
   renderer = BatchRenderer(
-    m, gpu_id, batch_size, 
-    batch_render_view_width, batch_render_view_width,
-    np.array([0, 1, 2]), False, args.use_rasterizer,
-    None)
+      m,
+      gpu_id,
+      batch_size,
+      batch_render_view_width,
+      batch_render_view_width,
+      np.array([0, 1, 2]),
+      False,
+      args.use_rasterizer,
+      None,
+  )
 
   rng = jax.random.PRNGKey(seed=2)
   rng, *key = jax.random.split(rng, args.num_worlds + 1)
 
   def dr(sys, rng):
     """Randomizes the mjx.Model."""
+
     @jax.vmap
     def rand(rng):
       rng, color_rng = jax.random.split(rng, 2)
@@ -123,7 +135,7 @@ def benchmark(
 
   randomization_rng = jax.random.split(rng, args.num_worlds)
   v_randomization_fn = functools.partial(dr, rng=randomization_rng)
-  
+
   v_mjx_model, v_in_axes = v_randomization_fn(m)
 
   in_axes = jax.tree_util.tree_map(lambda x: None, sys)
@@ -134,12 +146,15 @@ def benchmark(
   })
 
   sys = sys.tree_replace({
-    'geom_rgba': jp.repeat(
-      jp.expand_dims(sys.geom_rgba, 0), self.num_worlds, axis=0),
-    'geom_matid': jp.repeat(
-      jp.expand_dims(sys.geom_matid, 0), self.num_worlds, axis=0),
-    'geom_size': jp.repeat(
-      jp.expand_dims(sys.geom_size, 0), self.num_worlds, axis=0),
+      'geom_rgba': jp.repeat(
+          jp.expand_dims(sys.geom_rgba, 0), self.num_worlds, axis=0
+      ),
+      'geom_matid': jp.repeat(
+          jp.expand_dims(sys.geom_matid, 0), self.num_worlds, axis=0
+      ),
+      'geom_size': jp.repeat(
+          jp.expand_dims(sys.geom_size, 0), self.num_worlds, axis=0
+      ),
   })
 
   def init(rng, sys):
@@ -149,6 +164,7 @@ def benchmark(
       data = mjx.forward(sys, data)
       render_token, rgb, depth = renderer.init(data, sys)
       return data, render_token, rgb, depth
+
     return jax.vmap(init_, in_axes=[0, v_in_axes])(rng, sys)
 
   v_mjx_data, render_token, rgb, depth = init(jp.asarray(key), v_mjx_model)
@@ -161,6 +177,7 @@ def benchmark(
       d = forward.step(m, d)
       _, rgb, depth = renderer.render(render_token, d)
       return d, None
+
     d, _ = jax.lax.scan(step, v_data, None, length=nstep, unroll=unroll_steps)
 
     return d
@@ -174,7 +191,7 @@ def benchmark(
 if __name__ == '__main__':
   """Benchmark a model."""
   model = load_model(args.mjcf)
-  
+
   print(f'Rolling out {args.nstep} steps at dt = {model.opt.timestep:.3f}...')
   jit_time, run_time, steps = benchmark(
       m=model,

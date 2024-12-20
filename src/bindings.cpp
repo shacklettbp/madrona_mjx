@@ -62,14 +62,7 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
                 nb::device::cpu> tex_heights,
             nb::ndarray<const int32_t, nb::shape<-1>,
                 nb::device::cpu> tex_nchans,
-            nb::ndarray<const int32_t, nb::shape<-1>,
-                nb::device::cpu> light_mode,
-            nb::ndarray<const int32_t, nb::shape<-1>,
-                nb::device::cpu> light_isdir,
-            nb::ndarray<const float, nb::shape<-1, 3>,
-                nb::device::cpu> light_pos,
-            nb::ndarray<const float, nb::shape<-1, 3>,
-                nb::device::cpu> light_dir,
+            int64_t num_lights,
             int64_t num_cams,
             int64_t num_worlds,
             int64_t batch_render_view_width,
@@ -109,15 +102,11 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
                 .texWidths = (int32_t *)tex_widths.data(),
                 .texHeights = (int32_t *)tex_heights.data(),
                 .texNChans = (int32_t *)tex_nchans.data(),
-                .lightMode = (int32_t *)light_mode.data(),
-                .lightIsDir = (int32_t *)light_isdir.data(),
-                .lightPos = (math::Vector3 *)light_pos.data(),
-                .lightDir = (math::Vector3 *)light_dir.data(),
                 .numGeoms = (uint32_t)geom_types.shape(0),
                 .numMats = (uint32_t)mat_rgba.shape(0),
                 .numTextures = (uint32_t)tex_offsets.shape(0),
                 .numCams = (uint32_t)num_cams,
-                .numLights = (uint32_t)light_pos.shape(0),
+                .numLights = (uint32_t)num_lights,
                 .numEnabledGeomGroups = (uint32_t)enabled_geom_groups.shape(0),
             };
 
@@ -151,10 +140,7 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
            nb::arg("tex_widths"),
            nb::arg("tex_heights"),
            nb::arg("tex_nchans"),
-           nb::arg("light_mode"),
-           nb::arg("light_isdir"),
-           nb::arg("light_pos"),
-           nb::arg("light_dir"),
+           nb::arg("num_lights"),
            nb::arg("num_cams"),
            nb::arg("num_worlds"),
            nb::arg("batch_render_view_width"),
@@ -163,7 +149,7 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
            nb::arg("add_cam_debug_geo") = false,
            nb::arg("use_rt") = false,
            nb::arg("visualizer_gpu_handles") = nb::none(),
-           nb::keep_alive<1, 34>())
+           nb::keep_alive<1, 30>())
         .def("init", [](Manager &mgr,
                         nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_pos,
                         nb::ndarray<const float, nb::shape<-1, -1, 4>> geom_rot,
@@ -171,7 +157,12 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
                         nb::ndarray<const float, nb::shape<-1, -1, 4>> cam_rot,
                         nb::ndarray<const int32_t, nb::shape<-1, -1>> mat_ids,
                         nb::ndarray<const uint32_t, nb::shape<-1, -1>> geom_rgb,
-                        nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_sizes)
+                        nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_sizes,
+                        nb::ndarray<const float, nb::shape<-1, 3>> light_pos,
+                        nb::ndarray<const float, nb::shape<-1, 3>> light_dir,
+                        nb::ndarray<const bool, nb::shape<-1>> light_isdir,
+                        nb::ndarray<const bool, nb::shape<-1>> light_castshadow,
+                        nb::ndarray<const float, nb::shape<-1>> light_cutoff)
 
         {
             mgr.init((math::Vector3 *)geom_pos.data(),
@@ -180,7 +171,12 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
                      (math::Quat *)cam_rot.data(),
                      (int32_t *)mat_ids.data(),
                      (uint32_t *)geom_rgb.data(),
-                     (math::Diag3x3 *)geom_sizes.data());
+                     (math::Diag3x3 *)geom_sizes.data(),
+                     (math::Vector3 *)light_pos.data(),
+                     (math::Vector3 *)light_dir.data(),
+                     (bool *)light_isdir.data(),
+                     (bool *)light_castshadow.data(),
+                     (float *)light_cutoff.data());
         })
         .def("render", [](Manager &mgr,
                           nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_pos,

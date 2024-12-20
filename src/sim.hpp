@@ -22,6 +22,11 @@ enum class ExportID : uint32_t {
     InstanceColorOverrides,
     RaycastDepth,
     RaycastRGB,
+    LightPositions,
+    LightDirections,
+    LightTypes,
+    LightShadows,
+    LightCutoffAngles,
     NumExports,
 };
 
@@ -46,6 +51,7 @@ struct Sim : public madrona::WorldBase {
         Vector3 *geomSizes;
         uint32_t numGeoms;
         uint32_t numCams;
+        uint32_t numLights;
         const madrona::render::RenderECSBridge *renderBridge;
         bool useDebugCamEntity;
         bool useRT;
