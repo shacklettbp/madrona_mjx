@@ -11,7 +11,7 @@ import numpy as np
 import mujoco
 from mujoco import mjx
 
-from madrona_mjx.wrapper import dummy_tile, load_model
+from madrona_mjx.wrapper import load_model, _identity_randomization_fn
 from madrona_mjx.renderer import BatchRenderer
 from madrona_mjx.viz import VisualizerGPUState, Visualizer
 
@@ -51,7 +51,7 @@ if __name__ == '__main__':
     np.array([0, 1, 2]), args.add_cam_debug_geo, args.use_rasterizer,
     viz_gpu_state.get_gpu_handles())
 
-  v_mjx_model, v_in_axes = dummy_tile(mjx_model, args.num_worlds)
+  v_mjx_model, v_in_axes = _identity_randomization_fn(mjx_model, args.num_worlds)
 
   def init(rng, model):
     def init_(rng, model):

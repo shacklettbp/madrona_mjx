@@ -48,10 +48,6 @@ struct MJXModel {
     int32_t *texWidths;
     int32_t *texHeights;
     int32_t *texNChans;
-    int32_t *lightMode;
-    int32_t *lightIsDir;
-    madrona::math::Vector3 *lightPos;
-    madrona::math::Vector3 *lightDir;
     uint32_t numGeoms;
     uint32_t numMats;
     uint32_t numTextures;

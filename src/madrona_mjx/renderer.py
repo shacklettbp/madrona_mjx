@@ -129,15 +129,7 @@ class BatchRenderer:
     geom_mat_ids = jax.device_get(m.geom_matid)
     geom_rgba = jax.device_get(m.geom_rgba)
     mat_rgba = jax.device_get(m.mat_rgba)
-    light_mode = m.light_mode
-    light_active = jax.device_get(m.light_active)
-    light_isdir = jax.device_get(m.light_directional)
-    light_castshadow = jax.device_get(m.light_castshadow)
-    light_cutoff = jax.device_get(m.light_cutoff)
-    light_intensity = jax.device_get(m.light_exponent)
-    light_pos = jax.device_get(m.light_pos)
-    light_dir = jax.device_get(m.light_dir)
-    # TODO: filter for camera ids
+    num_lights = m.nlight
     num_cams = m.ncam
     assert(num_cams > 0) # Must have at least one camera for Madrona to work!
 
@@ -172,10 +164,7 @@ class BatchRenderer:
         tex_widths = tex_widths,
         tex_heights = tex_heights,
         tex_nchans = tex_nchans,
-        light_mode = light_mode,
-        light_isdir = light_isdir,
-        light_pos = light_pos,
-        light_dir = light_dir,
+        num_lights = num_lights,
         num_cams = num_cams,
         num_worlds = num_worlds,
         batch_render_view_width = batch_render_view_width,

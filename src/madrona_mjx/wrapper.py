@@ -2,6 +2,7 @@
 
 from typing import Callable, Optional, Tuple
 from etils import epath
+import functools
 
 import jax
 from jax import numpy as jp
@@ -22,7 +23,7 @@ def load_model(path: str):
   return model
 
 
-def dummy_tile(sys: System, num_worlds: int) -> Tuple[System, System]:
+def _identity_randomization_fn(sys: System, num_worlds: int) -> Tuple[System, System]:
   """Tile the necessary axes for the Madrona BatchRenderer."""
   in_axes = jax.tree_util.tree_map(lambda x: None, sys)
   in_axes = in_axes.tree_replace({
@@ -76,21 +77,28 @@ class MadronaWrapper(Wrapper):
   ):
     super().__init__(env)
     self.num_worlds = num_worlds
-    if randomization_fn is not None:
-      self._sys_v, self._in_axes = randomization_fn(self.sys)
-      # For user made DR functions, ensure that the output model includes the
-      # needed in_axes for madrona initialization.
-      assert self._in_axes is not None
-      assert self._in_axes.geom_rgba is not None
-      assert self._in_axes.geom_matid is not None
-      assert self._in_axes.geom_size is not None
-      
-      # Check shapes in model are consistent with num_worlds
-      assert self._sys_v.geom_rgba.shape[0] == num_worlds
-      assert self._sys_v.geom_matid.shape[0] == num_worlds
-      assert self._sys_v.geom_size.shape[0] == num_worlds
-    else:
-      self._sys_v, self._in_axes = dummy_tile(self.sys, self.num_worlds)
+    if not randomization_fn:
+      randomization_fn = functools.partial(
+          _identity_randomization_fn, num_worlds=num_worlds)
+
+    self._sys_v, self._in_axes = randomization_fn(self.sys)
+    # For user-made DR functions, ensure that the output model includes the
+    # needed in_axes and has the correct shape for madrona initialization.
+    required_fields = [
+        'geom_rgba',
+        'geom_matid',
+        'geom_size',
+        'light_pos',
+        'light_dir',
+        'light_directional',
+        'light_castshadow',
+        'light_cutoff',
+    ]
+    for field in required_fields:
+      assert hasattr(self._env._in_axes, field), f'{field} not in in_axes'
+      assert (
+          getattr(self._env._mjx_model_v, field).shape[0] == num_worlds
+      ), f'{field} shape does not match num_worlds'
 
   def _env_fn(self, sys: System) -> Env:
     env = self.env

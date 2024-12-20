@@ -171,15 +171,17 @@ Sim::Sim(Engine &ctx,
             ctx, cam, 60.f, 0.001f, Vector3::zero());
     }
     
-    Entity light = ctx.makeEntity<LightEntity>();
+    for (CountT light_idx = 0; light_idx < (CountT)cfg.numLights; light_idx++) {
+        Entity light = ctx.makeEntity<LightEntity>();
 
-    ctx.get<render::LightDescType>(light).type = render::LightDesc::Type::Directional;
-    ctx.get<render::LightDescShadow>(light).castShadow = false;
-    ctx.get<render::LightDescDirection>(light) = Vector3{-1.f, -1.f, -1.8f};
-    ctx.get<render::LightDescIntensity>(light).intensity = 3.f;
-    ctx.get<render::LightDescActive>(light).active = true;
+        ctx.get<render::LightDescType>(light).type = render::LightDesc::Type::Directional;
+        ctx.get<render::LightDescShadow>(light).castShadow = false;
+        ctx.get<render::LightDescDirection>(light) = Vector3{-1.f, -1.f, -1.8f};
+        ctx.get<render::LightDescIntensity>(light).intensity = 3.f;
+        ctx.get<render::LightDescActive>(light).active = true;
 
-    RenderingSystem::makeEntityLightCarrier(ctx, light);
+        RenderingSystem::makeEntityLightCarrier(ctx, light);
+    }
 }
 
 // This declaration is needed for the GPU backend in order to generate the

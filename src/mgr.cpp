@@ -243,7 +243,6 @@ struct Manager::Impl {
             geom_rotations,
             sizeof(Quat) * numGeoms * cfg.numWorlds,
             cudaMemcpyDeviceToDevice, strm);
-
         cudaMemcpyAsync(
             gpuExec.getExported((CountT)ExportID::CameraPositions),
             cam_positions,
@@ -441,18 +440,6 @@ struct Manager::Impl {
 
         copyInTransforms(jax_io.geomPositions, jax_io.geomRotations,
                          jax_io.camPositions, jax_io.camRotations, strm);
-
-#if 0
-        Vector3 *readback_pos = (Vector3 *)malloc(sizeof(Vector3) * numGeoms * cfg.numWorlds);
-        cudaMemcpy(jax_io.geomPositions,
-                   readback_pos,
-                   sizeof(Vector3) * numGeoms * cfg.numWorlds,
-                   cudaMemcpyHostToDevice);
-        printf("%f %f %f\n",
-            readback_pos[1].x,
-            readback_pos[1].y,
-            readback_pos[1].z);
-#endif
 
         gpuExec.runAsync(renderGraph, strm);
         // Currently a CPU sync is needed to read back the total number of
@@ -703,22 +690,9 @@ static RTAssets loadRenderObjects(
     if (render_mgr.has_value()) {
         render_mgr->loadObjects(objs, materials, imported_textures);
 
-        std::vector<render::LightConfig> lights;
-        for (CountT i = 0; i < model.numLights; i++) {
-            // Currently only supporting fixed lights
-            if (model.lightMode[i] != 0) continue;
-            
-            if (model.lightIsDir[i]) {
-                lights.push_back({
-                    true, model.lightDir[i], math::Vector3{1.0f, 1.0f, 1.0f}
-                });
-            } else {
-                // Point lights currently not supported, defaulting to directional
-                lights.push_back({
-                    true, model.lightDir[i], math::Vector3{1.0f, 1.0f, 1.0f}
-                });
-            }
-        }
+        std::vector<render::LightConfig> lights = {
+            {true, math::Vector3{0.0f, 0.0f, 0.0f}, math::Vector3{1.0f, 1.0f, 1.0f}}
+        };
         render_mgr->configureLighting(lights);
     }
 
@@ -751,6 +725,7 @@ Manager::Impl * Manager::Impl::make(
     Sim::Config sim_cfg;
     sim_cfg.numGeoms = mjx_model.numGeoms;
     sim_cfg.numCams = mjx_model.numCams;
+    sim_cfg.numLights = mjx_model.numLights;
     sim_cfg.useDebugCamEntity = mgr_cfg.addCamDebugGeometry;
     sim_cfg.useRT = use_rt;
 

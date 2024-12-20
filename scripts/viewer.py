@@ -21,7 +21,7 @@ import functools
 
 from madrona_mjx.renderer import BatchRenderer
 from madrona_mjx.viz import VisualizerGPUState, Visualizer
-from madrona_mjx.wrapper import load_model, dummy_tile
+from madrona_mjx.wrapper import load_model
 
 import argparse
 arg_parser = argparse.ArgumentParser()
@@ -79,8 +79,8 @@ def domain_randomize(sys, rng):
     # Lighting randomization
     new_light_pos = jax.random.uniform(
       rng, (3,),
-      minval=jp.asarray([-0.2, -0.2, 2]),
-      maxval=jp.asarray([0.2, 0.2, 2]))
+      minval=jp.asarray([-0.5, -0.5, 2]),
+      maxval=jp.asarray([0.5, 0.5, 2]))
     light_pos = sys.light_pos.at[:].set(new_light_pos)
     light_dir = sys.light_dir.at[:].set(jp.asarray([0, 0, -1]))
     light_directional = sys.light_directional.at[:].set(False)
@@ -133,6 +133,7 @@ if __name__ == '__main__':
     domain_randomize, rng=randomization_rng)  
   v_mjx_model, v_in_axes = v_randomization_fn(mjx_model)
 
+  @jax.jit
   def init(rng, sys):
     def init_(rng, sys):
       data = mjx.make_data(sys)
