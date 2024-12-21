@@ -181,6 +181,7 @@ struct Manager::Impl {
     Config cfg;
     uint32_t numGeoms;
     uint32_t numCams;
+    uint32_t numLights;
 
     Optional<RenderGPUState> renderGPUState;
     Optional<render::RenderManager> renderMgr;
@@ -198,6 +199,7 @@ struct Manager::Impl {
     inline Impl(const Manager::Config &mgr_cfg,
                 uint32_t num_geoms,
                 uint32_t num_cams,
+                uint32_t num_lights,
                 Optional<RenderGPUState> &&render_gpu_state,
                 Optional<render::RenderManager> &&render_mgr,
                 MWCudaExecutor &&gpu_exec,
@@ -206,6 +208,7 @@ struct Manager::Impl {
         : cfg(mgr_cfg),
           numGeoms(num_geoms),
           numCams(num_cams),
+          numLights(num_lights),
           renderGPUState(std::move(render_gpu_state)),
           renderMgr(std::move(render_mgr)),
           gpuExec(std::move(gpu_exec)),
@@ -287,27 +290,27 @@ struct Manager::Impl {
             cudaMemcpyAsync(
                 gpuExec.getExported((CountT)ExportID::LightPositions),
                 light_pos,
-                sizeof(Vector3) * cfg.numWorlds,
+                sizeof(Vector3) * numLights * cfg.numWorlds,
                 cudaMemcpyDeviceToDevice, strm);
             cudaMemcpyAsync(
                 gpuExec.getExported((CountT)ExportID::LightDirections),
                 light_dir,
-                sizeof(Vector3) * cfg.numWorlds,
+                sizeof(Vector3) * numLights * cfg.numWorlds,
                 cudaMemcpyDeviceToDevice, strm);
             cudaMemcpyAsync(
                 gpuExec.getExported((CountT)ExportID::LightTypes),
                 light_isdir,
-                sizeof(bool) * cfg.numWorlds,
+                sizeof(bool) * numLights * cfg.numWorlds,
                 cudaMemcpyDeviceToDevice, strm);
             cudaMemcpyAsync(
                 gpuExec.getExported((CountT)ExportID::LightShadows),
                 light_castshadow,
-                sizeof(bool) * cfg.numWorlds,
+                sizeof(bool) * numLights * cfg.numWorlds,
                 cudaMemcpyDeviceToDevice, strm);
             cudaMemcpyAsync(
                 gpuExec.getExported((CountT)ExportID::LightCutoffAngles),
                 light_cutoff,
-                sizeof(float) * cfg.numWorlds,
+                sizeof(float) * numLights * cfg.numWorlds,
                 cudaMemcpyDeviceToDevice, strm);
         }
     }
@@ -691,7 +694,7 @@ static RTAssets loadRenderObjects(
         render_mgr->loadObjects(objs, materials, imported_textures);
 
         std::vector<render::LightConfig> lights = {
-            {true, math::Vector3{0.0f, 0.0f, 0.0f}, math::Vector3{1.0f, 1.0f, 1.0f}}
+            {true, math::Vector3{1.0f, 1.0f, -2.0f}, math::Vector3{1.0f, 1.0f, 1.0f}}
         };
         render_mgr->configureLighting(lights);
     }
@@ -810,6 +813,7 @@ Manager::Impl * Manager::Impl::make(
         mgr_cfg,
         mjx_model.numGeoms,
         mjx_model.numCams,
+        mjx_model.numLights,
         std::move(render_gpu_state),
         std::move(render_mgr),
         std::move(gpu_exec),

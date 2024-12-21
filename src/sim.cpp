@@ -102,8 +102,8 @@ static void setupInitTasks(TaskGraphBuilder &builder,
     } else {
         sort_sys = queueSortByWorld<CameraEntity>(builder, {});
     }
-
     sort_sys = queueSortByWorld<RenderEntity>(builder, {sort_sys});
+    sort_sys = queueSortByWorld<LightEntity>(builder, {sort_sys});
 #else
     (void)builder;
     (void)cfg;
