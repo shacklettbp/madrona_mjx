@@ -442,11 +442,11 @@ def _setup_jax_primitives(
     batch_dims = vector_arg_values[1].shape[:-2]
     # TODO: Replace hacks on these batch dimension checks and reshapes
     if len(batch_dims) > 1:
-      num_worlds = np.prod(batch_dims)
-      params = tuple(
-          jp.reshape(v, (num_worlds,) + v.shape[len(batch_dims):])
-          for v in vector_arg_values[1:])
-      vector_arg_values = vector_arg_values[:1] + params
+      #num_worlds = np.prod(batch_dims)
+      #params = tuple(
+      #    jp.reshape(v, (num_worlds,) + v.shape[len(batch_dims):])
+      #    for v in vector_arg_values[1:])
+      #vector_arg_values = vector_arg_values[:1] + params
       num_worlds = np.prod(batch_dims)
       params = tuple(
           jp.reshape(v, (num_worlds,) + v.shape[len(batch_dims) :])
