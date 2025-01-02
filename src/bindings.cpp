@@ -86,15 +86,27 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
                 .numMeshes = (uint32_t)mesh_vertex_offsets.shape(0),
             };
 
+            // We need to make some copies because mgr.cpp will override
+            math::Vector4 *ptr_geom_rgba = (math::Vector4 *)malloc(
+                    sizeof(math::Vector4) * geom_rgba.shape(0));
+            int32_t *ptr_geom_mat_ids = (int32_t *)malloc(
+                    sizeof(int32_t) * geom_mat_ids.shape(0));
+            int32_t *ptr_geom_data_ids = (int32_t *)malloc(
+                    sizeof(int32_t) * geom_data_ids.shape(0));
+
+            memcpy(ptr_geom_rgba, geom_rgba.data(), sizeof(math::Vector4) * geom_rgba.shape(0));
+            memcpy(ptr_geom_mat_ids, geom_mat_ids.data(), sizeof(int32_t) * geom_mat_ids.shape(0));
+            memcpy(ptr_geom_data_ids, geom_data_ids.data(), sizeof(int32_t) * geom_data_ids.shape(0));
+
             MJXModel mjx_model {
                 .meshGeo = mesh_geo,
                 .geomTypes = (int32_t *)geom_types.data(),
                 .geomGroups = (int32_t *)geom_groups.data(),
-                .geomDataIDs = (int32_t *)geom_data_ids.data(),
-                .geomMatIDs = (int32_t *)geom_mat_ids.data(),
+                .geomDataIDs = ptr_geom_data_ids,//(int32_t *)geom_data_ids.data(),
+                .geomMatIDs = ptr_geom_mat_ids,//(int32_t *)geom_mat_ids.data(),
                 .enabledGeomGroups = (int32_t *)enabled_geom_groups.data(),
                 .geomSizes = (math::Vector3 *)geom_sizes.data(),
-                .geomRGBA = (math::Vector4 *)geom_rgba.data(),
+                .geomRGBA = ptr_geom_rgba,//(math::Vector4 *)geom_rgba.data(),
                 .matRGBA = (math::Vector4 *)mat_rgba.data(),
                 .matTexIDs = (int32_t *)mat_tex_ids.data(),
                 .texData = (uint8_t *) tex_data.data(),
@@ -119,6 +131,10 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
                 .useRT = use_rt,
             }, mjx_model, viz_gpu_hdls != nullptr ? *viz_gpu_hdls :
                 Optional<VisualizerGPUHandles>::none());
+
+            free(ptr_geom_rgba);
+            free(ptr_geom_mat_ids);
+            free(ptr_geom_data_ids);
         }, nb::arg("gpu_id"),
            nb::arg("mesh_vertices"),
            nb::arg("mesh_faces"),

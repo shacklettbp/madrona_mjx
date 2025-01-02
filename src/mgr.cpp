@@ -700,13 +700,15 @@ static RTAssets loadRenderObjects(
     }
 
     if (use_rt) {
-        return {
+        auto ret = RTAssets {
             render::AssetProcessor::makeBVHData(objs),
             render::AssetProcessor::initMaterialData(materials.data(),
                                      materials.size(),
                                      imported_textures.data(),
                                      imported_textures.size())
         };
+
+        return ret;
     } else {
         return {};
     }

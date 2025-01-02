@@ -31,9 +31,9 @@ arg_parser.add_argument('--add-cam-debug-geo', action='store_true')
 arg_parser.add_argument('--use-rasterizer', action='store_true')
 args = arg_parser.parse_args()
 
-viz_gpu_state = VisualizerGPUState(
-    args.window_width, args.window_height, args.gpu_id
-)
+# viz_gpu_state = VisualizerGPUState(
+#     args.window_width, args.window_height, args.gpu_id
+# )
 
 
 def limit_jax_mem(limit):
@@ -47,7 +47,32 @@ xla_flags = os.environ.get('XLA_FLAGS', '')
 xla_flags += ' --xla_gpu_triton_gemm_any=True'
 os.environ['XLA_FLAGS'] = xla_flags
 
-if __name__ == '__main__':
+def test_free():
+  model = load_model(args.mjcf)
+  mjx_model = mjx.put_model(model)
+  mjx_data = mjx.make_data(mjx_model)
+
+  renderer = BatchRenderer(
+      mjx_model,
+      args.gpu_id,
+      args.num_worlds,
+      args.batch_render_view_width,
+      args.batch_render_view_width,
+      np.array([0, 1, 2]),
+      args.add_cam_debug_geo,
+      args.use_rasterizer,
+      None,
+  )
+
+  del renderer
+
+test_free()
+os.environ['MADRONA_DISABLE_CUDA_HEAP_SIZE'] = '1'
+test_free()
+test_free()
+
+#if __name__ == '__main__':
+if False:
   model = load_model(args.mjcf)
   mjx_model = mjx.put_model(model)
   mjx_data = mjx.make_data(mjx_model)
