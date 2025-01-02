@@ -31,14 +31,9 @@ arg_parser.add_argument('--add-cam-debug-geo', action='store_true')
 arg_parser.add_argument('--use-rasterizer', action='store_true')
 args = arg_parser.parse_args()
 
-# viz_gpu_state = VisualizerGPUState(
-#     args.window_width, args.window_height, args.gpu_id
-# )
-
 
 def limit_jax_mem(limit):
   os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = f'{limit:.2f}'
-
 
 limit_jax_mem(0.1)
 
@@ -47,7 +42,7 @@ xla_flags = os.environ.get('XLA_FLAGS', '')
 xla_flags += ' --xla_gpu_triton_gemm_any=True'
 os.environ['XLA_FLAGS'] = xla_flags
 
-def test_free():
+if __name__ == '__main__':  
   model = load_model(args.mjcf)
   mjx_model = mjx.put_model(model)
   mjx_data = mjx.make_data(mjx_model)
@@ -61,33 +56,9 @@ def test_free():
       np.array([0, 1, 2]),
       args.add_cam_debug_geo,
       args.use_rasterizer,
-      None,
+      None 
   )
-
-  del renderer
-
-test_free()
-os.environ['MADRONA_DISABLE_CUDA_HEAP_SIZE'] = '1'
-test_free()
-test_free()
-
-#if __name__ == '__main__':
-if False:
-  model = load_model(args.mjcf)
-  mjx_model = mjx.put_model(model)
-  mjx_data = mjx.make_data(mjx_model)
-
-  renderer = BatchRenderer(
-      mjx_model,
-      args.gpu_id,
-      args.num_worlds,
-      args.batch_render_view_width,
-      args.batch_render_view_width,
-      np.array([0, 1, 2]),
-      args.add_cam_debug_geo,
-      args.use_rasterizer,
-      viz_gpu_state.get_gpu_handles(),
-  )
+  print("Renderer initialized")
 
   v_mjx_model, v_in_axes = _identity_randomization_fn(
       mjx_model, args.num_worlds
@@ -105,8 +76,8 @@ if False:
   rng = jax.random.PRNGKey(seed=2)
   rng, *key = jax.random.split(rng, args.num_worlds + 1)
   v_mjx_data, render_token, rgb, depth = init(jp.asarray(key), v_mjx_model)
+  print("Renderer init called")
 
-  @jax.jit
   def step(data):
     def step_(data):
       _, rgb, depth = renderer.render(render_token, data)
@@ -114,10 +85,61 @@ if False:
 
     return jax.vmap(step_)(data)
 
-  def vis_step_fn(carry):
-    data = carry
-    data, rgb, depth = step(data)
-    return data
+  step = jax.jit(step).lower(v_mjx_data).compile()
+  state = v_mjx_data
+  for i in range(5):
+    state, rgb, depth = step(state)
+    print(f"Step {i}/5 successful")
 
-  visualizer = Visualizer(viz_gpu_state, renderer.madrona)
-  visualizer.loop(renderer.madrona, vis_step_fn, (v_mjx_data))
+  del renderer
+  print("Finished first test")
+
+#  gc.collect()
+  os.environ['MADRONA_DISABLE_CUDA_HEAP_SIZE'] = '1'
+
+  renderer = BatchRenderer(
+      mjx_model,
+      args.gpu_id,
+      args.num_worlds,
+      args.batch_render_view_width,
+      args.batch_render_view_width,
+      np.array([0, 1, 2]),
+      args.add_cam_debug_geo,
+      args.use_rasterizer,
+      None 
+  )
+  print("Renderer initialized")
+
+  v_mjx_model, v_in_axes = _identity_randomization_fn(
+      mjx_model, args.num_worlds
+  )
+
+  def init(rng, model):
+    def init_(rng, model):
+      data = mjx.make_data(model)
+      data = mjx.forward(model, data)
+      render_token, rgb, depth = renderer.init(data, model)
+      return data, render_token, rgb, depth
+
+    return jax.vmap(init_, in_axes=[0, v_in_axes])(rng, model)
+
+  rng = jax.random.PRNGKey(seed=2)
+  rng, *key = jax.random.split(rng, args.num_worlds + 1)
+  v_mjx_data, render_token, rgb, depth = init(jp.asarray(key), v_mjx_model)
+  print("Renderer init called")
+
+  def step(data):
+    def step_(data):
+      _, rgb, depth = renderer.render(render_token, data)
+      return data, rgb, depth
+
+    return jax.vmap(step_)(data)
+
+  step = jax.jit(step).lower(v_mjx_data).compile()
+  state = v_mjx_data
+  for i in range(5):
+    state, rgb, depth = step(state)
+    print(f"Step {i}/5 successful")
+
+  del renderer
+  print("Finished second test")
