@@ -436,17 +436,17 @@ def _setup_jax_primitives(
     # assert all(b == batch_axes[1] for b in batch_axes[1:])
     batch_axes = list(batch_axes)
     for i in range(1, len(batch_axes)):
-      if batch_axes[i] != batch_axes[1]:
+      if batch_axes[i] != 0:
         print("Inferred batch not found, overriding manually")
         batch_axes[i] = 0
     batch_dims = vector_arg_values[1].shape[:-2]
     # TODO: Replace hacks on these batch dimension checks and reshapes
     if len(batch_dims) > 1:
-      num_worlds = np.prod(batch_dims)
-      # params = tuple(
-      #     jp.reshape(v, (num_worlds,) + v.shape[len(batch_dims):])
-      #     for v in vector_arg_values[1:])
-      # vector_arg_values = vector_arg_values[:1] + params
+      #num_worlds = np.prod(batch_dims)
+      #params = tuple(
+      #    jp.reshape(v, (num_worlds,) + v.shape[len(batch_dims):])
+      #    for v in vector_arg_values[1:])
+      #vector_arg_values = vector_arg_values[:1] + params
       num_worlds = np.prod(batch_dims)
       params = tuple(
           jp.reshape(v, (num_worlds,) + v.shape[len(batch_dims) :])
