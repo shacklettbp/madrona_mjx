@@ -156,6 +156,7 @@ if __name__ == '__main__':
       args.batch_render_view_width,
       args.batch_render_view_width,
       np.array([0, 1, 2]),
+      None,
       args.add_cam_debug_geo,
       args.use_rasterizer,
       viz_gpu_state.get_gpu_handles(),

@@ -97,6 +97,7 @@ def benchmark(
       batch_render_view_width,
       batch_render_view_width,
       np.array([0, 1, 2]),
+      None,
       False,
       args.use_rasterizer,
       None,
