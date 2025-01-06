@@ -131,6 +131,7 @@ class BatchRenderer:
       batch_render_view_width,
       batch_render_view_height,
       enabled_geom_groups=np.array([0, 1, 2]),
+      enabled_cameras=None,
       add_cam_debug_geo=False,
       use_rasterizer=False,
       viz_gpu_hdls=None,
@@ -150,8 +151,17 @@ class BatchRenderer:
     geom_rgba = jax.device_get(m.geom_rgba)
     mat_rgba = jax.device_get(m.mat_rgba)
     num_lights = m.nlight
-    num_cams = m.ncam
-    assert num_cams > 0  # Must have at least one camera for Madrona to work!
+
+    # If enabled_cameras is not provided, enable all cameras
+    if enabled_cameras is None:
+      enabled_cameras = np.arange(m.ncam)
+    else:
+      assert len(enabled_cameras) <= m.ncam
+
+    assert m.ncam > 0  # Must have at least one camera for Madrona to work!    
+    
+    self.enabled_cameras = enabled_cameras
+    num_cams = len(enabled_cameras)
 
     mat_tex_ids = m.mat_texid
     tex_data = m.tex_data
@@ -270,7 +280,9 @@ class BatchRenderer:
 
   def init(self, state, model):
     geom_quat = self.get_geom_quat(state)
+    cam_pos = state.cam_xpos[self.enabled_cameras]
     cam_quat = self.get_cam_quat(state)
+    cam_quat = cam_quat[self.enabled_cameras]
     geom_rgba_uint = jp.array(model.geom_rgba * 255, jp.uint32)
     geom_size = self.adjust_scale(model.geom_size, model.geom_type)
 
@@ -287,7 +299,7 @@ class BatchRenderer:
         render_token,
         state.geom_xpos,
         geom_quat,
-        state.cam_xpos,
+        cam_pos,
         cam_quat,
         model.geom_matid,
         rgb_uint32,
@@ -303,9 +315,10 @@ class BatchRenderer:
 
   def render(self, render_token, state):
     geom_pos = state.geom_xpos
-    cam_pos = state.cam_xpos
+    cam_pos = state.cam_xpos[self.enabled_cameras]
     geom_quat = self.get_geom_quat(state)
     cam_quat = self.get_cam_quat(state)
+    cam_quat = cam_quat[self.enabled_cameras]
 
     rgb, depth, render_token = self.render_prim_fn(
         render_token, geom_pos, geom_quat, cam_pos, cam_quat

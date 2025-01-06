@@ -9,7 +9,6 @@ import os
 
 import jax
 import jax.numpy as jp
-import mujoco
 from mujoco import mjx
 import numpy as np
 
@@ -54,6 +53,7 @@ if __name__ == '__main__':
       args.batch_render_view_width,
       args.batch_render_view_width,
       np.array([0, 1, 2]),
+      None,
       args.add_cam_debug_geo,
       args.use_rasterizer,
       None 
@@ -64,6 +64,7 @@ if __name__ == '__main__':
       mjx_model, args.num_worlds
   )
 
+  @jax.jit
   def init(rng, model):
     def init_(rng, model):
       data = mjx.make_data(model)
@@ -77,6 +78,7 @@ if __name__ == '__main__':
   rng, *key = jax.random.split(rng, args.num_worlds + 1)
   v_mjx_data, render_token, rgb, depth = init(jp.asarray(key), v_mjx_model)
   print("Renderer init called")
+  print(f"RGB shape: {rgb.shape}")
 
   def step(data):
     def step_(data):
@@ -94,7 +96,6 @@ if __name__ == '__main__':
   del renderer
   print("Finished first test")
 
-#  gc.collect()
   os.environ['MADRONA_DISABLE_CUDA_HEAP_SIZE'] = '1'
 
   renderer = BatchRenderer(
@@ -104,6 +105,7 @@ if __name__ == '__main__':
       args.batch_render_view_width,
       args.batch_render_view_width,
       np.array([0, 1, 2]),
+      None,
       args.add_cam_debug_geo,
       args.use_rasterizer,
       None 
@@ -114,6 +116,7 @@ if __name__ == '__main__':
       mjx_model, args.num_worlds
   )
 
+  @jax.jit
   def init(rng, model):
     def init_(rng, model):
       data = mjx.make_data(model)
