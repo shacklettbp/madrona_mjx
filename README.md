@@ -17,14 +17,22 @@ Currently Madrona-MJX requires building the renderer from source, then locally i
 
 ### Prerequisites
 
+sudo apt install libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev mesa-common-dev
+
 **Cuda**
 The Cuda toolkit is required to build the renderer. Use [Cuda 12.5.1]([url](https://developer.nvidia.com/cuda-12-5-1-download-archive)) or earlier. [Cudnn](https://developer.nvidia.com/cudnn) will be required for the upcoming local Jax install.
 
 **Jax**
+TRY JAX THEN JAXLOCAL?
 Naively running `pip install jax["cuda12"]` can result in Jax pulling a different version of the Cuda binaries than the toolkit binaries used to build the wrapper. To prevent this, after installing the Cuda Toolkit and Cudnn, run `pip install jax["cuda12_local"]`. 
 
 **Cmake**
 If `cmake..` below does not work, check your cmake version with `cmake --version` and try updating to at least [cmake 3.31.0](https://github.com/Kitware/CMake/releases/download/v3.31.0-rc2/cmake-3.31.0-rc2-linux-x86_64.sh).
+
+sudo apt remove purge cmake
+pip install cmake
+now use cmake 3.31++
+
 
 ### Source Installation
 ```sh

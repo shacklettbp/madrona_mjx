@@ -29,11 +29,11 @@ from madrona_mjx.wrapper import load_model
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('--mjcf', type=str, required=True)
 arg_parser.add_argument('--gpu-id', type=int, default=0)
-arg_parser.add_argument('--num-worlds', type=int, required=True)
-arg_parser.add_argument('--window-width', type=int, required=True)
-arg_parser.add_argument('--window-height', type=int, required=True)
-arg_parser.add_argument('--batch-render-view-width', type=int, required=True)
-arg_parser.add_argument('--batch-render-view-height', type=int, required=True)
+arg_parser.add_argument('--num-worlds', type=int, default=16)
+arg_parser.add_argument('--window-width', type=int, default=2500)
+arg_parser.add_argument('--window-height', type=int, default=1500)
+arg_parser.add_argument('--batch-render-view-width', type=int, default=128)
+arg_parser.add_argument('--batch-render-view-height', type=int, default=128)
 arg_parser.add_argument('--add-cam-debug-geo', action='store_true')
 arg_parser.add_argument('--use-rasterizer', action='store_true')
 
@@ -171,7 +171,6 @@ if __name__ == '__main__':
   )
   v_mjx_model, v_in_axes = v_randomization_fn(mjx_model)
 
-  @jax.jit
   def init(rng, sys):
     def init_(rng, sys):
       data = mjx.make_data(sys)
