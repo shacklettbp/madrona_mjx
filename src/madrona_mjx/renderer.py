@@ -244,7 +244,7 @@ class BatchRenderer:
       x, y, z = size
       # Plane
       size = size.at[:].set(
-          jp.where(gtype == 0, jp.array([x * 2, y * 2, 1], jp.float32), size)
+          jp.where(gtype == 0, jp.array([x, y, 1], jp.float32), size)
       )
       # Heightfields - Currently not supported
       size = size.at[:].set(
