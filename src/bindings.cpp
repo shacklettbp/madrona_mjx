@@ -67,6 +67,8 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
             int64_t num_worlds,
             int64_t batch_render_view_width,
             int64_t batch_render_view_height,
+            nb::ndarray<const float, nb::shape<-1>,
+                nb::device::cpu> cam_fovy,
             nb::ndarray<const int32_t, nb::shape<-1>,
                 nb::device::cpu> enabled_geom_groups,
             bool add_cam_debug_geo,
@@ -120,6 +122,7 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
                 .numCams = (uint32_t)num_cams,
                 .numLights = (uint32_t)num_lights,
                 .numEnabledGeomGroups = (uint32_t)enabled_geom_groups.shape(0),
+                .camFovy = (float *)cam_fovy.data(),
             };
 
             new (self) Manager(Manager::Config {
@@ -161,11 +164,12 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
            nb::arg("num_worlds"),
            nb::arg("batch_render_view_width"),
            nb::arg("batch_render_view_height"),
+           nb::arg("cam_fovy"),
            nb::arg("enabled_geom_groups"),
            nb::arg("add_cam_debug_geo") = false,
            nb::arg("use_rt") = false,
            nb::arg("visualizer_gpu_handles") = nb::none(),
-           nb::keep_alive<1, 30>())
+           nb::keep_alive<1, 31>())
         .def("init", [](Manager &mgr,
                         nb::ndarray<const float, nb::shape<-1, -1, 3>> geom_pos,
                         nb::ndarray<const float, nb::shape<-1, -1, 4>> geom_rot,

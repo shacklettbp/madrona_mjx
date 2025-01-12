@@ -168,7 +168,7 @@ Sim::Sim(Engine &ctx,
         ctx.get<Position>(cam) = Vector3::zero();
         ctx.get<Rotation>(cam) = Quat { 1, 0, 0, 0 };
         render::RenderingSystem::attachEntityToView(
-            ctx, cam, 45.f, 0.001f, Vector3::zero());
+            ctx, cam, cfg.camFovy[cam_idx], 0.001f, Vector3::zero());
     }
     
     for (CountT light_idx = 0; light_idx < (CountT)cfg.numLights; light_idx++) {

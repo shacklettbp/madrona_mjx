@@ -757,6 +757,8 @@ Manager::Impl * Manager::Impl::make(
         sizeof(int32_t) * mjx_model.numGeoms);
     Vector3 *geom_sizes_gpu = (Vector3 *)cu::allocGPU(
         sizeof(Vector3) * mjx_model.numGeoms);
+    float *cam_fovy = (float * )cu::allocGPU(
+        sizeof(float) * mjx_model.numCams);
 
     REQ_CUDA(cudaMemcpy(geom_types_gpu, mjx_model.geomTypes,
         sizeof(int32_t) * mjx_model.numGeoms, cudaMemcpyHostToDevice));
@@ -764,10 +766,13 @@ Manager::Impl * Manager::Impl::make(
         sizeof(int32_t) * mjx_model.numGeoms, cudaMemcpyHostToDevice));
     REQ_CUDA(cudaMemcpy(geom_sizes_gpu, mjx_model.geomSizes,
         sizeof(Vector3) * mjx_model.numGeoms, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(cam_fovy, mjx_model.camFovy,
+        sizeof(float) * mjx_model.numCams, cudaMemcpyHostToDevice));
 
     sim_cfg.geomTypes = geom_types_gpu;
     sim_cfg.geomDataIDs = geom_data_ids_gpu;
     sim_cfg.geomSizes = geom_sizes_gpu;
+    sim_cfg.camFovy = cam_fovy;
 
     HeapArray<Sim::WorldInit> world_inits(mgr_cfg.numWorlds);
 
@@ -810,6 +815,7 @@ Manager::Impl * Manager::Impl::make(
     cu::deallocGPU(geom_types_gpu);
     cu::deallocGPU(geom_data_ids_gpu);
     cu::deallocGPU(geom_sizes_gpu);
+    cu::deallocGPU(cam_fovy);
 
     return new Impl {
         mgr_cfg,

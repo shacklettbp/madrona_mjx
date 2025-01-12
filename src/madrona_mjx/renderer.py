@@ -201,6 +201,7 @@ class BatchRenderer:
         num_worlds=num_worlds,
         batch_render_view_width=batch_render_view_width,
         batch_render_view_height=batch_render_view_height,
+        cam_fovy=m.cam_fovy,
         enabled_geom_groups=enabled_geom_groups,
         add_cam_debug_geo=add_cam_debug_geo,
         use_rt=not use_rasterizer,
@@ -294,6 +295,7 @@ class BatchRenderer:
     rgb_uint32 = jax.vmap(rgb2int)(geom_rgba_uint)
 
     render_token = jp.array((), jp.bool)
+    print(model.light_castshadow)
 
     init_rgb, init_depth, render_token = self.init_prim_fn(
         render_token,
