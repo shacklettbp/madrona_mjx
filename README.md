@@ -3,7 +3,9 @@
 ## Overview
 Madrona MJX is an integration of the [Madrona](https://madrona-engine.github.io) engine with
 Mujoco MJX to provide high-throughput batch rendering within mjx for training vision-based
-policies. See this document for a detailed [walkthrough](https://github.com/shacklettbp/madrona_mjx/blob/main/docs/MADRONA.md) of the project.
+policies. See this document for a detailed [walkthrough](https://github.com/shacklettbp/madrona_mjx/blob/main/docs/WALKTHROUGH.md) of the project.
+For those interested in integrating the Madrona renderer with other simulators, please refer to this document
+detailing the [integration](https://github.com/shacklettbp/madrona_mjx/blob/main/docs/INTEGRATION.md) process.
 
 ## Features
 - High throughput Batch Renderer
