@@ -52,7 +52,7 @@ pip install -e .
 - In the case that `cmake..` below does not work, check your cmake version with `cmake --version` and try updating to at least [cmake 3.31.0](https://github.com/Kitware/CMake/releases/download/v3.31.0-rc2/cmake-3.31.0-rc2-linux-x86_64.sh).
 
 ```
-sudo apt remove purge cmake
+sudo apt remove --purge cmake
 pip install cmake
 cmake --version # Should be 3.31+
 ```
