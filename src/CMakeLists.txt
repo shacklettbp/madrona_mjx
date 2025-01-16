@@ -15,9 +15,20 @@ target_link_libraries(madmjx_cpu_impl
         madrona_rendering_system
 )
 
+option(LOAD_VULKAN "Load Vulkan libraries" ON)
+
 add_library(madmjx_mgr SHARED
     mgr.hpp mgr.cpp
 )
+
+if (NOT LOAD_VULKAN)
+    message(INFO "Disabling vulkan!")
+    target_compile_definitions(madmjx_mgr
+        PRIVATE
+            -DMGR_DISABLE_VULKAN)
+else ()
+    message(INFO "Vulkan was enabled")
+endif ()
 
 target_link_libraries(madmjx_mgr 
     PRIVATE
