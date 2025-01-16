@@ -1,17 +1,5 @@
 # Madrona MJX Code Walkthrough
 
-## Overview
-
-Madrona MJX provides a bridge between the MJX simulator and Madrona's batch renderer. Concretely, this means that
-the Python libraries that Madrona MJX provides can take your MJX state and produce rendered outputs for them.
-This is intended for vision-based training use cases.
-
-The renderer features that are currently supported are the following:
-- The ability to render images in a batched fashion, meaning that it can render thousands of images at the same time at high throughput.
-- Simple lighting with shadows (configurable).
-- Both directional and spotlights which can move.
-- Variable number of cameras per world.
-
 This walkthrough will guide you through the key components and structure of this project.
 
 Madrona utilizes a GPU-based entity-component-system (ECS) where environment state is stored in a unique pattern in contiguous GPU memory. This state-of-the-art GPU memory structure allows for high throughput rendering through efficient data access by the Madrona Batch Renderer.
@@ -64,3 +52,18 @@ In order to invoke the batch renderer (which also entails doing the further proc
 ### `sim.cpp` and invoking the batch renderer
 
 The code in `sim.cpp` serves one main purpose: it defines the `Taskgraph`, a series of functions which will run on the GPU, which in this case, serves to transform the data provided by the simulator into something that the Madrona renderer can understand. Namely, the Madrona renderer requires that all rendered instances and cameras be described using components and archetypes (which concretely translate into specially managed contiguous arrays of data residing on the GPU).
+
+
+
+MUSTAFA DROP
+An example vision training pipeline is provided in the following colab.
+
+Madrona-MJX integrates directly into brax training pipelines. To include the batch rendererer into a new environments you must:
+1. Create the batch renderer when your environment is created, passing along the correct arguments.
+2. Call the .init() method inside your environment reset, passing along the correct arguments.
+3. Call the .render() method inside your environment step to recieve rgb + depth outputs.
+
+To make integration easier, a specialized wrapper is provided that replaces the typical Brax VmapWrapper and DomainRandomizationWrapper.
+The MadronaWrapper should be used in replacement to those other wrappers to vmap and initialize the renderer properly. MadronaWrapper 
+optionally takes in a randomization function that can be used to randomize your model. viewer.py includes a domain randomization example for randomizing the size
+and color of the floor.
