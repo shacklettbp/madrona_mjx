@@ -295,7 +295,6 @@ class BatchRenderer:
     rgb_uint32 = jax.vmap(rgb2int)(geom_rgba_uint)
 
     render_token = jp.array((), jp.bool)
-    print(model.light_castshadow)
 
     init_rgb, init_depth, render_token = self.init_prim_fn(
         render_token,
