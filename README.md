@@ -1,5 +1,9 @@
 # Madrona MJX
 
+<h1>
+  <a href="#"><img alt="Madrona-MJX" src="data/banner.png" width="100%"></a>
+</h1>
+
 ## Overview
 Madrona MJX is a bridge between the [MJX](https://mujoco.readthedocs.io/en/stable/mjx.html) physics engine and [Madrona](https://madrona-engine.github.io)'s Batch Renderer used as a library that provides high-throughput batch rendering within MJX for training vision-based policies. Madrona MJX allows for the MJX data structures to be passed to Madrona for rendering. This interactions happens directly on the GPU, resulting in physics and rendering to occur efficiently on device. This results in rendering FPS in the hundreds of thousands.
 
