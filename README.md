@@ -97,7 +97,15 @@ and color of the floor.
 
 ## Important tips
 
-- USE CACHE
+### Use the megakernel and BVH compilation caches
+
+Whenever Madrona's internal systems get initialized, it compiles a set of CUDA kernels which get run every step. These CUDA kernels can take a while to compile because they require some custom code generation. Because all the GPU code that Madrona compiles doesn't change per run in the context of Madrona MJX, we suggest users use the supported "kernel" caches that Madrona provides to skip the compilation process once the kernels have been compiled for the first run. In order to use them, you need to pass in the following environment variables:
+
+- `MADRONA_MWGPU_KERNEL_CACHE`: set this to the path to the Madrona megakernel cache.
+- `MADRONA_BVH_KERNEL_CACHE`: set this to the path to the BVH kernel cache.
+
+### 
+
 - A camera must be included in the mjcf
 - Domain randimization must include the correct setting of geom_rgba, geom_size, and geom_matid. Please see the viewer for an example.
 - Only one renderer can be initialized at a time. This means two environments cannot be created that both use their own batch renderer instances. (e.g. train/eval)
