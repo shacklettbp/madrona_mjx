@@ -1,6 +1,6 @@
 # Integration with other simulators
 
-Before reaing this document, we suggest you read the [walkthrough](https://github.com/shacklettbp/madrona_mjx/blob/main/docs/WALKTHROUGH.md) document.
+Before reading this document, we suggest you read the [walkthrough](https://github.com/shacklettbp/madrona_mjx/blob/main/docs/WALKTHROUGH.md) document.
 
 There are a few main considerations when integrating Madrona's renderer with a custom simulator.
 
@@ -9,13 +9,13 @@ There are a few main considerations when integrating Madrona's renderer with a c
 There are a couple important terms that we need to define in order to fully specify all parts of the state:
 - *Environments*: a namespace to encapsulate a set of object instances and views.
 - *Objects*: 3D assets (made of triangle meshes and optionally textures). They are referred to by a global ID, and aren't specific to any environment.
-- *Instances*: these are associated with a specific environment and maintain a position and rotation to define its transform in the environemnt is belongs to.
-A single *object* may be instanced many times, across many environments. Instances therefore also maintain its *object* ID which defines which asset to render
+- *Instances*: these are associated with a specific environment and maintain a position and rotation to define its transform in the environemnt it belongs to.
+A single *object* may be instanced many times, across many environments. Instances therefore also maintain its *object* ID that defines asset to render
 for this instance.
 - *View*: camera parameters which are also specific to an environment. Each environment can have multiple views. The batch renderer is responsible for rendering
 output frames for all views across all environments. Currently, views share the same width/height and FOV.
 
-## Defining the Objects (geometry)
+## Defining the Objects (Geometry)
 
 This is the first step in integrating another simulator. Geometry needs to be loaded in a way that Madrona understands.
 MJX has its own format for describing geometry for a model. Perhaps the simulator you'd like to integrate has its own geomtery data format as well. Therefore, the first step is modifying this process. This will require some manual modifications in `mgr.cpp` to do this. Particularly, you will want to modify the `loadRenderObjects` function [here](https://github.com/shacklettbp/madrona_mjx/blob/cf7a70291ba2d24f8c4f2bc76488a3dcfa9b3481/src/mgr.cpp#L471). Madrona's geometry format works as follows:
@@ -34,7 +34,7 @@ Once this array has been created, you can pass it to the `AssetProcessor`'s BVH 
 
 ## Configuring the environments
 
-In order to configure the environment, you will need to create the proper ECS constructs in `sim.cpp`. This can be seen inside the `Sim` class's [constructor](https://github.com/shacklettbp/madrona_mjx/blob/cf7a70291ba2d24f8c4f2bc76488a3dcfa9b3481/src/sim.cpp#L135). The main idea is to simply create entities for all instances that need to be rendered, configure their object ID and other basic properties (such as initial position). The order in which you [create](https://github.com/shacklettbp/madrona_mjx/blob/cf7a70291ba2d24f8c4f2bc76488a3dcfa9b3481/src/sim.cpp#144) these entities is important and needs to stay consistent as you copy in updated transforms during the simulation rollout - we describe this in the next subsection.
+In order to configure the environment, you will need to create the proper ECS constructs in `sim.cpp`. This can be seen inside the `Sim` class's [constructor](https://github.com/shacklettbp/madrona_mjx/blob/cf7a70291ba2d24f8c4f2bc76488a3dcfa9b3481/src/sim.cpp#L135). The main idea is to simply create entities for all instances that need to be rendered, configure their object ID and other basic properties (such as initial position). The order in which you [create](https://github.com/shacklettbp/madrona_mjx/blob/cf7a70291ba2d24f8c4f2bc76488a3dcfa9b3481/src/sim.cpp#144) these entities is important and needs to stay consistent as you copy in updated transforms during the simulation rollout.
 
 ## Passing in updated transforms to the render function
 
@@ -43,6 +43,19 @@ In order to invoke the renderer, one needs to call `MadronaBatchRenderer`'s `ren
 Take for example the position tensor. This needs to be a contiguous tensor of all x/y/z positions of all instances across all worlds. All positions need to first be ordered by world. Within each world, they need to be ordered in the order you created in the `Sim` constructor we described previously.
 
 The same can be said for rotations though instead of x/y/z, we expect w/x/y/z quaternions.
+
+## Passing in updated transforms to the `init` function
+
+To enable domain randomization across worlds, `madrona_mjx` implements a way to set
+unique data per world such that you can have different visual properties per world.
+These can be different lighting conditions, textures, colors, sizes, etc...
+
+The visual properties are only updated once in the `init` function and other
+state like the instance or camera transforms are updated in `render` every frame.
+
+If you wish to update visual properties every frame as well, you would need
+to modify the `render` function to take in those properties and update them
+accordingly in `sim.cpp`.
 
 ## Retrieving the rendered output tensors
 

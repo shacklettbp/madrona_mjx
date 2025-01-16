@@ -27,8 +27,6 @@ for _ in range(num_steps):
     rendered_output_tensors = renderer.rgbd_tensors()
 ```
 
-Now, we go into detail as to how the interface works.
-
 ## Code Walkthrough
 
 ### Bindings `src/bindings.cpp`
@@ -53,17 +51,4 @@ In order to invoke the batch renderer (which also entails doing the further proc
 
 The code in `sim.cpp` serves one main purpose: it defines the `Taskgraph`, a series of functions which will run on the GPU, which in this case, serves to transform the data provided by the simulator into something that the Madrona renderer can understand. Namely, the Madrona renderer requires that all rendered instances and cameras be described using components and archetypes (which concretely translate into specially managed contiguous arrays of data residing on the GPU).
 
-
-
-MUSTAFA DROP
-An example vision training pipeline is provided in the following colab.
-
-Madrona-MJX integrates directly into brax training pipelines. To include the batch rendererer into a new environments you must:
-1. Create the batch renderer when your environment is created, passing along the correct arguments.
-2. Call the .init() method inside your environment reset, passing along the correct arguments.
-3. Call the .render() method inside your environment step to recieve rgb + depth outputs.
-
-To make integration easier, a specialized wrapper is provided that replaces the typical Brax VmapWrapper and DomainRandomizationWrapper.
-The MadronaWrapper should be used in replacement to those other wrappers to vmap and initialize the renderer properly. MadronaWrapper 
-optionally takes in a randomization function that can be used to randomize your model. viewer.py includes a domain randomization example for randomizing the size
-and color of the floor.
+We go into more detail regarding what exactly `sim.cpp` must do in the [integration](https://github.com/shacklettbp/madrona_mjx/blob/main/docs/INTEGRATION.md) document.
