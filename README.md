@@ -59,11 +59,11 @@ cmake --version # Should be 3.31+
 
 ## Getting Started
 
-The best way to get started with `madrona_mjx` is through its integration with [MuJoCo Playground](https://github.com/kevinzakka/mujoco_playground).
+The best way to get started with `madrona_mjx` is through its integration with [MuJoCo Playground](https://github.com/google-deepmind/mujoco_playground).
 
 For tutorials on using MuJoCo Playground with Madrona-MJX, see:
 
-1. Training CartPole from Vision [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google-deepmind/mujoco_playground/blob/main/learning/training_vision_1.ipynb)
+1. Training CartPole from Vision  [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google-deepmind/mujoco_playground/blob/main/learning/notebooks/training_vision_1.ipynb)
 
 
 ## Usage
