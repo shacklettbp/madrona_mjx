@@ -43,6 +43,10 @@ static inline Optional<RenderGPUState> initRenderGPUState(
         return Optional<RenderGPUState>::none();
     }
 
+#ifdef MGR_DISABLE_VULKAN
+    return Optional<RenderGPUState>::none();
+#endif
+
     auto render_api_lib = render::APIManager::loadDefaultLib();
     render::APIManager render_api_mgr(render_api_lib.lib());
     render::GPUHandle gpu = render_api_mgr.initGPU(mgr_cfg.gpuID);
