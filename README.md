@@ -49,7 +49,9 @@ cd ..
 pip install -e .
 ```
 
-- In the case that `cmake..` below does not work, check your cmake version with `cmake --version` and try updating to at least [cmake 3.31.0](https://github.com/Kitware/CMake/releases/download/v3.31.0-rc2/cmake-3.31.0-rc2-linux-x86_64.sh).
+> If you are on a machine which doesn't have Vulkan installed (i.e., when you run a script, you run into an assertion failure at `madrona::render::vk::Backend::Init::init`), make sure to replace `cmake ..` with `cmake -DLOAD_VULKAN=OFF ..` so that the application doesn't try to load Vulkan.
+
+- In the case that running `cmake` does not work, check your cmake version with `cmake --version` and try updating to at least [cmake 3.31.0](https://github.com/Kitware/CMake/releases/download/v3.31.0-rc2/cmake-3.31.0-rc2-linux-x86_64.sh).
 
 ```
 sudo apt remove --purge cmake
