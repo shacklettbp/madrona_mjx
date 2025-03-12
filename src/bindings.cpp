@@ -214,7 +214,7 @@ NB_MODULE(_madrona_mjx_batch_renderer, m) {
         .def("instance_rotations_tensor", &Manager::instanceRotationsTensor)
         .def("camera_positions_tensor", &Manager::cameraPositionsTensor)
         .def("camera_rotations_tensor", &Manager::cameraRotationsTensor)
-        .def("rgb_tensor", &Manager::rgbTensor)
+        .def("segmask_tensor", &Manager::rgbTensor)
         .def("depth_tensor", &Manager::depthTensor)
         .def("xla_entries", [](Manager &mgr)
         {

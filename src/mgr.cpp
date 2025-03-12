@@ -920,12 +920,12 @@ Tensor Manager::rgbTensor() const
 {
     const uint8_t *rgb_ptr = impl_->getRGBOut();
 
-    return Tensor((void*)rgb_ptr, TensorElementType::UInt8, {
+    return Tensor((void*)rgb_ptr, TensorElementType::Int32, {
         impl_->cfg.numWorlds,
         impl_->numCams,
         impl_->cfg.batchRenderViewHeight,
         impl_->cfg.batchRenderViewWidth,
-        4,
+        1,
     }, impl_->cfg.gpuID);
 }
 

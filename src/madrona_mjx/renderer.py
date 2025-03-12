@@ -346,8 +346,8 @@ def _setup_jax_primitives(
 
   renderer_outputs = [
       jax.ShapeDtypeStruct(
-          shape=(num_worlds, num_cams, render_height, render_width, 4),
-          dtype=jp.uint8,
+          shape=(num_worlds, num_cams, render_height, render_width, 1),
+          dtype=jp.int32,
       ),
       jax.ShapeDtypeStruct(
           shape=(num_worlds, num_cams, render_height, render_width, 1),

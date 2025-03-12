@@ -79,6 +79,28 @@ struct Visualizer {
             sim_cb();
         }, [&]() {
 #ifdef MADRONA_CUDA_SUPPORT
+            static constexpr ImU32 kRandomColorTable[] = {
+                IM_COL32(0, 0, 0, 255),
+                IM_COL32(170, 0, 0, 255),
+
+                IM_COL32(0, 170, 170, 255),
+
+                IM_COL32(0, 0, 170, 255),
+                IM_COL32(170, 0, 170, 255),
+
+                IM_COL32(170, 170, 0, 255),
+                IM_COL32(0, 170, 0, 255),
+                IM_COL32(170, 170, 170, 255),
+                IM_COL32(85, 85, 85, 255),
+                IM_COL32(255, 85, 85, 255),
+                IM_COL32(85, 255, 85, 255),
+                IM_COL32(85, 85, 255, 255),
+                IM_COL32(85, 255, 255, 255),
+                IM_COL32(255, 255, 85, 255),
+                IM_COL32(255, 85, 255, 255),
+                IM_COL32(255, 255, 255, 255)
+            };
+
             uint32_t raycast_output_resolution = batchViewWidth;
             uint32_t image_idx = viewer.getCurrentWorldID() * 
                 numCams + std::max(viewer.getCurrentViewID(), (CountT)0);
@@ -102,15 +124,15 @@ struct Visualizer {
             raycast_tensor_depth = (char *)depth_print_ptr;
 
             // Extract rgb from buffer
-            unsigned char* rgb_print_ptr;
-            rgb_print_ptr = (unsigned char*)cu::allocReadback(num_bytes);
+            unsigned char* sm_print_ptr;
+            sm_print_ptr = (unsigned char*)cu::allocReadback(num_bytes);
             char *raycast_tensor_rgb = (char *)(mgr.rgbTensor().devicePtr());
 
             raycast_tensor_rgb += image_idx * bytes_per_image;
-            cudaMemcpy(rgb_print_ptr, raycast_tensor_rgb,
+            cudaMemcpy(sm_print_ptr, raycast_tensor_rgb,
                 bytes_per_image,
                 cudaMemcpyDeviceToHost);
-            raycast_tensor_rgb = (char *)rgb_print_ptr;
+            raycast_tensor_rgb = (char *)sm_print_ptr;
 
             ImGui::Begin("RGB and Depth Tensor Debug");
 
@@ -154,11 +176,16 @@ struct Visualizer {
                 for (int j = 0; j < (int)raycast_output_resolution; j++) {
                     uint32_t linear_idx = 4 * (j + i * raycast_output_resolution);
 
+                    uint32_t seg_mask = *((uint32_t *)(raycasters + linear_idx));
+
+#if 0
                     auto realColor = IM_COL32(
                         (uint8_t)raycasters[linear_idx + 0],
                         (uint8_t)raycasters[linear_idx + 1],
                         (uint8_t)raycasters[linear_idx + 2], 
                         255);
+#endif
+                    auto realColor = kRandomColorTable[seg_mask % 16];
 
                     draw2->AddRectFilled(
                         { (j * pixSpace) + windowPos.x + horOff, 
