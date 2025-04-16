@@ -141,3 +141,32 @@ The following features are *not* supported:
 - Particle systems
 - Musles, Tendons, Composites (Except for any rigid body components)
 
+
+## Citation
+--------
+If you use Madrona-MJX in your scientific works, you can cite the following relevant papers:
+
+High-throughput rendering in Madrona
+```bibtex
+@article{rosenzweig24madronarenderer,
+    title   = {High-Throughput Batch Rendering for Embodied AI},
+    author  = {Luc Guy Rosenzweig and Brennan Shacklett and
+               Warren Xia and 
+               Kayvon Fatahalian},
+    conference = {SIGGRAPH Asia 2024 Conference Papers},
+    year    = {2024}
+}
+```
+
+Mujoco Playground
+```bibtex
+@misc{mujoco_playground_2025,
+  title = {MuJoCo Playground: An open-source framework for GPU-accelerated robot learning and sim-to-real transfer.},
+  author = {Zakka, Kevin and Tabanpour, Baruch and Liao, Qiayuan and Haiderbhai, Mustafa and Holt, Samuel and Luo, Jing Yuan and Allshire, Arthur and Frey, Erik and Sreenath, Koushil and Kahrs, Lueder A. and Sferrazza, Carlo and Tassa, Yuval and Abbeel, Pieter},
+  year = {2025},
+  publisher = {GitHub},
+  url = {https://github.com/google-deepmind/mujoco_playground}
+}
+```
+
+
