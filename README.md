@@ -125,6 +125,8 @@ For vision training examples and sample usage, please visit MuJoCo Playground, w
 
 5. The number of worlds must be known and initialized at the very beginning. All future rendering will render all worlds, there is no way to disable or not render certain worlds. (implication is that train/eval must have same batch size)
 
+6. The `MADRONA_MWGPU_DEVICE_HEAP_SIZE` environment variable can be used to change how much memory Madrona pre-allocates. If you are using hardware that has limited GPU memory, you can adjust this value, but you will need to identify how much memory is required for your use case. Not allocating enough memory will throw an error.
+
 ## Feature Parity
 > Not every attribute of the MJX data structures can be rendered by Madrona.
 
