@@ -35,6 +35,7 @@ Currently Madrona-MJX requires building the renderer from source, then locally i
 
 5. Install `madrona_mjx`
 
+
 ```sh
 git clone https://github.com/shacklettbp/madrona_mjx.git
 
@@ -48,6 +49,8 @@ make -j
 cd ..
 pip install -e .
 ```
+
+> if using uv, you can use `uv pip install -e .`
 
 > If you are on a machine which doesn't have Vulkan installed (i.e., when you run a script, you run into an assertion failure at `madrona::render::vk::Backend::Init::init`), make sure to replace `cmake ..` with `cmake -DLOAD_VULKAN=OFF ..` so that the application doesn't try to load Vulkan.
 
