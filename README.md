@@ -35,6 +35,7 @@ Currently Madrona-MJX requires building the renderer from source, then locally i
 
 5. Install `madrona_mjx`
 
+
 ```sh
 git clone https://github.com/shacklettbp/madrona_mjx.git
 
@@ -47,6 +48,17 @@ make -j
 
 cd ..
 pip install -e .
+```
+> if using uv, you can use `uv pip install -e .`
+
+> If you are on a machine which doesn't have Vulkan installed (i.e., when you run a script, you run into an assertion failure at `madrona::render::vk::Backend::Init::init`), make sure to replace `cmake ..` with `cmake -DLOAD_VULKAN=OFF ..` so that the application doesn't try to load Vulkan.
+
+- In the case that running `cmake` does not work, check your cmake version with `cmake --version` and try updating to at least [cmake 3.31.0](https://github.com/Kitware/CMake/releases/download/v3.31.0-rc2/cmake-3.31.0-rc2-linux-x86_64.sh).
+
+```
+sudo apt remove --purge cmake
+pip install cmake
+cmake --version # Should be 3.31+
 ```
 
 ## [Conda/mamba](https://mamba.readthedocs.io/en/latest/installation/mamba-installation.html) installation
@@ -68,16 +80,6 @@ pip install -e .
 > Note: In case running scripts/viewer.py fails due missing cuda libraries, update environment by setting `export XLA_FLAGS=--xla_gpu_cuda_data_dir=$CONDA_PREFIX`
 
 > Note: In case you have issues with rendering the viewer, update environment by setting `export PYGLFW_LIBRARY_VARIANT=x11`
-
-> If you are on a machine which doesn't have Vulkan installed (i.e., when you run a script, you run into an assertion failure at `madrona::render::vk::Backend::Init::init`), make sure to replace `cmake ..` with `cmake -DLOAD_VULKAN=OFF ..` so that the application doesn't try to load Vulkan.
-
-- In the case that running `cmake` does not work, check your cmake version with `cmake --version` and try updating to at least [cmake 3.31.0](https://github.com/Kitware/CMake/releases/download/v3.31.0-rc2/cmake-3.31.0-rc2-linux-x86_64.sh).
-
-```
-sudo apt remove --purge cmake
-pip install cmake
-cmake --version # Should be 3.31+
-```
 
 ## Getting Started
 
@@ -142,6 +144,8 @@ For vision training examples and sample usage, please visit MuJoCo Playground, w
 
 5. The number of worlds must be known and initialized at the very beginning. All future rendering will render all worlds, there is no way to disable or not render certain worlds. (implication is that train/eval must have same batch size)
 
+6. The `MADRONA_MWGPU_DEVICE_HEAP_SIZE` environment variable can be used to change how much memory Madrona pre-allocates. If you are using hardware that has limited GPU memory, you can adjust this value, but you will need to identify how much memory is required for your use case. Not allocating enough memory will throw an error.
+
 ## Feature Parity
 > Not every attribute of the MJX data structures can be rendered by Madrona.
 
@@ -157,4 +161,33 @@ The following features are *not* supported:
 - Deformable bodies
 - Particle systems
 - Musles, Tendons, Composites (Except for any rigid body components)
+
+
+## Citation
+--------
+If you use Madrona-MJX in your scientific works, you can cite the following relevant papers:
+
+High-throughput rendering in Madrona
+```bibtex
+@article{rosenzweig24madronarenderer,
+    title   = {High-Throughput Batch Rendering for Embodied AI},
+    author  = {Luc Guy Rosenzweig and Brennan Shacklett and
+               Warren Xia and 
+               Kayvon Fatahalian},
+    conference = {SIGGRAPH Asia 2024 Conference Papers},
+    year    = {2024}
+}
+```
+
+Mujoco Playground
+```bibtex
+@misc{mujoco_playground_2025,
+  title = {MuJoCo Playground: An open-source framework for GPU-accelerated robot learning and sim-to-real transfer.},
+  author = {Zakka, Kevin and Tabanpour, Baruch and Liao, Qiayuan and Haiderbhai, Mustafa and Holt, Samuel and Luo, Jing Yuan and Allshire, Arthur and Frey, Erik and Sreenath, Koushil and Kahrs, Lueder A. and Sferrazza, Carlo and Tassa, Yuval and Abbeel, Pieter},
+  year = {2025},
+  publisher = {GitHub},
+  url = {https://github.com/google-deepmind/mujoco_playground}
+}
+```
+
 

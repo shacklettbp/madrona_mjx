@@ -1,6 +1,6 @@
 [build-system]
 requires = []
-build-backend = "madrona-py-build"
+build-backend = "madrona_py_build"
 backend-path = ["external/madrona/py"]
 
 [project]
