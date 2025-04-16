@@ -49,7 +49,6 @@ make -j
 cd ..
 pip install -e .
 ```
-
 > if using uv, you can use `uv pip install -e .`
 
 > If you are on a machine which doesn't have Vulkan installed (i.e., when you run a script, you run into an assertion failure at `madrona::render::vk::Backend::Init::init`), make sure to replace `cmake ..` with `cmake -DLOAD_VULKAN=OFF ..` so that the application doesn't try to load Vulkan.
@@ -61,6 +60,26 @@ sudo apt remove --purge cmake
 pip install cmake
 cmake --version # Should be 3.31+
 ```
+
+## [Conda/mamba](https://mamba.readthedocs.io/en/latest/installation/mamba-installation.html) installation
+
+```bash
+mamba create -n madmjx python=3.11
+mamba activate madmjx
+mamba install cuda==12.5.1 cudnn cuda-nvcc cmake
+mamba install xorg-xorgproto # yes, for some reason, this has to be installed separately
+pip install "jax[cuda12_local]" mujoco-mjx mujoco brax
+mkdir build && cd build
+cmake .. -DLOAD_VULKAN=OFF
+make -j
+
+cd ..
+pip install -e .
+```
+
+> Note: In case running scripts/viewer.py fails due missing cuda libraries, update environment by setting `export XLA_FLAGS=--xla_gpu_cuda_data_dir=$CONDA_PREFIX`
+
+> Note: In case you have issues with rendering the viewer, update environment by setting `export PYGLFW_LIBRARY_VARIANT=x11`
 
 ## Getting Started
 
