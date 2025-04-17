@@ -11,6 +11,10 @@ version = "0.0.1"
 path = "src/madrona_mjx"
 ext-out-dir = "build"
 extensions = [ "_madrona_mjx_batch_renderer", "_madrona_mjx_visualizer" ]
+requires-python = ">=3.10"
+dependencies = [
+    "jax<0.6.0",
+]
 
 [tool.isort]
 force_single_line = true

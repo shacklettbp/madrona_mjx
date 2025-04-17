@@ -28,7 +28,9 @@ Currently Madrona-MJX requires building the renderer from source, then locally i
 
 2. Install [Cuda 12.5.1]([url](https://developer.nvidia.com/cuda-12-5-1-download-archive)) or earlier. [Cudnn](https://developer.nvidia.com/cudnn) will be required for the upcoming local Jax install.
 
-3. Install Jax using `pip install -U jax["cuda12"]`. Sometime Jax will pull a different version then your local CUDA binaries, to avoid this you can try `pip install "jax[cuda12_local]"`
+3. Install Jax using `pip install -U "jax[cuda12]<0.6.0"`. Sometime Jax will pull a different version then your local CUDA binaries, to avoid this you can try `pip install "jax[cuda12_local]"`
+
+>Jax versions >=0.6.0 will not work, since some API's were deprecated and removed. Until this library is updated, use any version before 0.6.0
 
 4. Install MuJoCo and MuJoCo MJX `pip install -U mujoco mujoco-mjx`
     - `madrona_mjx` requires version >= 3.2.7
