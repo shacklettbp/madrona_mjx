@@ -221,9 +221,9 @@ class BatchRenderer:
     self.init_prim_fn = init_fn
     self.render_prim_fn = render_fn
 
-  def get_geom_quat(self, state):
+  def get_geom_quat(self, state, model):
     to_global = jax.vmap(math.quat_mul)
-    geom_quat = to_global(state.xquat[self.m.geom_bodyid], self.m.geom_quat)
+    geom_quat = to_global(state.xquat[self.m.geom_bodyid], model.geom_quat)
     return geom_quat
 
   def get_cam_quat(self, state):
@@ -280,7 +280,7 @@ class BatchRenderer:
     return jax.vmap(adjust)(geom_size, geom_type)
 
   def init(self, state, model):
-    geom_quat = self.get_geom_quat(state)
+    geom_quat = self.get_geom_quat(state, model)
     cam_pos = state.cam_xpos[self.enabled_cameras]
     cam_quat = self.get_cam_quat(state)
     cam_quat = cam_quat[self.enabled_cameras]
@@ -314,10 +314,10 @@ class BatchRenderer:
 
     return render_token, init_rgb, init_depth
 
-  def render(self, render_token, state):
+  def render(self, render_token, state, model):
     geom_pos = state.geom_xpos
     cam_pos = state.cam_xpos[self.enabled_cameras]
-    geom_quat = self.get_geom_quat(state)
+    geom_quat = self.get_geom_quat(state, model)
     cam_quat = self.get_cam_quat(state)
     cam_quat = cam_quat[self.enabled_cameras]
 
