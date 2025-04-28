@@ -280,7 +280,6 @@ class BatchRenderer:
     return jax.vmap(adjust)(geom_size, geom_type)
 
   def init(self, state, model):
-    self.m = model
     geom_quat = self.get_geom_quat(state)
     cam_pos = state.cam_xpos[self.enabled_cameras]
     cam_quat = self.get_cam_quat(state)
