@@ -36,7 +36,7 @@ def _identity_randomization_fn(
       'geom_size': 0,
       'light_pos': 0,
       'light_dir': 0,
-      'light_directional': 0,
+      'light_type': 0,
       'light_castshadow': 0,
       'light_cutoff': 0,
   })
@@ -57,8 +57,8 @@ def _identity_randomization_fn(
       'light_dir': jp.repeat(
           jp.expand_dims(sys.light_dir, 0), num_worlds, axis=0
       ),
-      'light_directional': jp.repeat(
-          jp.expand_dims(sys.light_directional, 0), num_worlds, axis=0
+      'light_type': jp.repeat(
+          jp.expand_dims(sys.light_type, 0), num_worlds, axis=0
       ),
       'light_castshadow': jp.repeat(
           jp.expand_dims(sys.light_castshadow, 0), num_worlds, axis=0
@@ -105,7 +105,7 @@ class MadronaWrapper(Wrapper):
         'geom_size',
         'light_pos',
         'light_dir',
-        'light_directional',
+        'light_type',
         'light_castshadow',
         'light_cutoff',
     ]
