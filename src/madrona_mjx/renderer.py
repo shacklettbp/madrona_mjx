@@ -296,6 +296,11 @@ class BatchRenderer:
 
     render_token = jp.array((), jp.bool)
 
+    # Convert light_type from int32_t into bool
+    light_isdir = jp.array(
+        model.light_type == 1, jp.bool
+    )
+
     init_rgb, init_depth, render_token = self.init_prim_fn(
         render_token,
         state.geom_xpos,
@@ -307,7 +312,7 @@ class BatchRenderer:
         geom_size,
         model.light_pos,
         model.light_dir,
-        model.light_directional,
+        light_isdir,
         model.light_castshadow,
         model.light_cutoff,
     )

@@ -92,7 +92,7 @@ def domain_randomize(sys, rng):
     )
     light_pos = sys.light_pos.at[:].set(new_light_pos)
     light_dir = sys.light_dir.at[:].set(jp.asarray([0, 0, -1]))
-    light_directional = sys.light_directional.at[:].set(False)
+    light_type = sys.light_type.at[:].set(False)
     light_castshadow = sys.light_castshadow.at[:].set(True)
     light_cutoff = sys.light_cutoff.at[:].set(
         jax.random.uniform(rng, (1,), minval=1, maxval=1.5)
@@ -103,7 +103,7 @@ def domain_randomize(sys, rng):
         geom_size,
         light_pos,
         light_dir,
-        light_directional,
+        light_type,
         light_castshadow,
         light_cutoff,
     )
@@ -114,7 +114,7 @@ def domain_randomize(sys, rng):
       geom_size,
       light_pos,
       light_dir,
-      light_directional,
+      light_type,
       light_castshadow,
       light_cutoff,
   ) = rand(rng)
@@ -126,7 +126,7 @@ def domain_randomize(sys, rng):
       'geom_size': 0,
       'light_pos': 0,
       'light_dir': 0,
-      'light_directional': 0,
+      'light_type': 0,
       'light_castshadow': 0,
       'light_cutoff': 0,
   })
@@ -137,7 +137,7 @@ def domain_randomize(sys, rng):
       'geom_size': geom_size,
       'light_pos': light_pos,
       'light_dir': light_dir,
-      'light_directional': light_directional,
+      'light_type': light_type,
       'light_castshadow': light_castshadow,
       'light_cutoff': light_cutoff,
   })
