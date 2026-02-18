@@ -4,6 +4,13 @@
   <a href="#"><img alt="Madrona-MJX" src="data/banner.png" width="100%"></a>
 </h1>
 
+> [!CAUTION]
+> **Deprecation Notice**
+> 
+> This project is now **deprecated** and no longer actively maintained. 
+> 
+> High-throughput batch rendering is now natively supported within the MuJoCo ecosystem via [**MJWarp**](https://mujoco.readthedocs.io/en/stable/mjwarp/index.html). The renderer can be accessed in MJX via the warp backend, an example is provided [here](https://github.com/google-deepmind/mujoco/blob/main/mjx/mujoco/mjx/warp/visualize_render.py). We recommend all users migrate to the official MJX renderer for better long-term support, performance, and feature parity.
+
 ## Overview
 Madrona MJX is a bridge between the [MJX](https://mujoco.readthedocs.io/en/stable/mjx.html) physics engine and [Madrona](https://madrona-engine.github.io)'s Batch Renderer used as a library that provides high-throughput batch rendering within MJX for training vision-based policies. Madrona MJX allows for the MJX data structures to be passed to Madrona for rendering. This interactions happens directly on the GPU, resulting in physics and rendering to occur efficiently on device. This results in rendering FPS in the hundreds of thousands.
 
